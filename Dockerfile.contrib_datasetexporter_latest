@@ -1,0 +1,49 @@
+# Based on https://github.com/open-telemetry/opentelemetry-collector-releases/blob/main/distributions/otelcol-contrib/Dockerfile
+# This Dockerfile builds opentelemetry-collector-contrib compatible Docker image with the latest
+# development version of dataset exporter from datasetexporter-latest branch from our fork.
+
+##
+## Builder image
+##
+FROM --platform=$BUILDPLATFORM golang:1.20 as builder
+
+ARG TARGETARCH
+
+# Needed since otel relies on ca-certs.crt bundle for cert validation
+RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
+
+# install builder
+RUN go install go.opentelemetry.io/collector/cmd/builder@v0.83.0
+
+# copy source files, so we rebuild images when something changes
+WORKDIR /build
+COPY dataset-go/ ./dataset-go/
+COPY scalyr-opentelemetry-collector-contrib/ ./scalyr-opentelemetry-collector-contrib/
+COPY opentelemetry-collector-releases ./opentelemetry-collector-releases
+
+# copy build configuration
+COPY otelcol-builder.datasetexporter-latest.yaml .
+
+# build it
+WORKDIR /build
+
+# Those flags are needed for multi arch scratch based image
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} $GOPATH/bin/builder --config=/build/otelcol-builder.datasetexporter-latest.yaml
+
+##
+## Runtime image
+##
+FROM scratch as runtime
+
+ARG USER_UID=10001
+USER ${USER_UID}
+
+WORKDIR /
+
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder --chmod=755 /build/_build/otelcol-contrib /otelcol-contrib
+COPY --from=builder /build/opentelemetry-collector-releases/configs/otelcol-contrib.yaml /etc/otelcol-contrib/config.yaml
+
+ENTRYPOINT ["/otelcol-contrib"]
+CMD ["--config", "/etc/otelcol-contrib/config.yaml"]
+EXPOSE 4317 55680 55679

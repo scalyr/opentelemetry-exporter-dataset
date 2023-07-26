@@ -1,0 +1,34 @@
+receivers:
+  filelog/flog:
+    include: [ "/tmp/logs-10000.log" ]
+    start_at: beginning
+    retry_on_failure:
+      enabled: true
+
+exporters:
+  dataset/logs:
+    api_key: not-used
+    dataset_url: http://dataset-dummy-server-rel:8000
+    buffer:
+      max_lifetime: 5s
+    sending_queue:
+      storage: file_storage/otc
+  logging:
+
+extensions:
+  file_storage/otc:
+    directory: /tmp/otc/
+    timeout: 10s
+
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 2s
+
+service:
+  extensions: [file_storage/otc]
+  pipelines:
+    logs:
+      receivers: [filelog/flog]
+      processors: [batch]
+      exporters: [dataset/logs]

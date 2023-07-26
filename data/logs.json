@@ -1,0 +1,118 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "service.example-dataset"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "logRecords": [
+            {
+              "attributes": [
+                {
+                  "key": "string.attribute",
+                  "value": {
+                    "stringValue": "some string - children - 111111111"
+                  }
+                },
+                {
+                  "key": "boolean.attribute",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "int.attribute",
+                  "value": {
+                    "intValue": 10
+                  }
+                },
+                {
+                  "key": "double.attribute",
+                  "value": {
+                    "doubleValue": 637.704
+                  }
+                },
+                {
+                  "key": "array.attribute",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "many"
+                        },
+                        {
+                          "stringValue": "values"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "key": "map.attribute",
+                  "value": {
+                    "kvlistValue": {
+                      "values": [
+                        {
+                          "key": "some.map.key",
+                          "value": {
+                            "stringValue": "some value"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "body": {
+                "stringValue": "example-dataset: children - 111111111 - example log record"
+              },
+              "observedTimeUnixNano": 1111111110300000000,
+              "severityText": "Information",
+              "spanId": "1111111113C1B174",
+              "timeUnixNano": 1111111110300000000,
+              "traceId": "1111111118038103D269B633813FC60C"
+            },
+            {
+              "attributes": [
+                {
+                  "key": "string.attribute",
+                  "value": {
+                    "stringValue": "some string - parent - 111111111"
+                  }
+                }
+              ],
+              "body": {
+                "stringValue": "example-dataset: parent - 111111111 - example log record"
+              },
+              "observedTimeUnixNano": 1111111110500000000,
+              "severityText": "Information",
+              "spanId": "1111111113C1B173",
+              "timeUnixNano": 1111111110500000000,
+              "traceId": "1111111118038103D269B633813FC60C"
+            }
+          ],
+          "scope": {
+            "attributes": [
+              {
+                "key": "my.scope.attribute",
+                "value": {
+                  "stringValue": "some scope attribute"
+                }
+              }
+            ],
+            "name": "my.library",
+            "version": "1.0.0"
+          }
+        }
+      ]
+    }
+  ]
+}

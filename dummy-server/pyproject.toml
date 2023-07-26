@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "dummy-server"
+version = "0.0.1"
+description = ""
+authors = ["Martin Majlis <martin.majlis@sentinelone.com>"]
+readme = "README.md"
+packages = [{include = "dummy_server"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.101.1"
+uvicorn = "^0.21.1"
+pyhocon = "^0.3.60"
+
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.1.1"
+black = "^23.3.0"
+flake8 = "^6.0.0"
+isort = "^5.12.0"
+ddt = "^1.6.0"
+pytest = "^7.2.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

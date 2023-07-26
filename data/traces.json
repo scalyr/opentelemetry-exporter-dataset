@@ -1,0 +1,67 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "service.example-dataset"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "attributes": [
+              {
+                "key": "my.scope.attribute",
+                "value": {
+                  "stringValue": "example-dataset: some scope attribute"
+                }
+              }
+            ],
+            "name": "my.library",
+            "version": "1.0.0"
+          },
+          "spans": [
+            {
+              "attributes": [
+                {
+                  "key": "my.span.attr",
+                  "value": {
+                    "stringValue": "example-dataset: parent - 111111111 - span attribute"
+                  }
+                }
+              ],
+              "endTimeUnixNano": 1111111111000000000,
+              "kind": 2,
+              "name": "example-dataset: parent - 111111111 - span name",
+              "spanId": "1111111113C1B173",
+              "startTimeUnixNano": 1111111110000000000,
+              "traceId": "1111111118038103D269B633813FC60C"
+            },
+            {
+              "attributes": [
+                {
+                  "key": "my.span.attr",
+                  "value": {
+                    "stringValue": "example-dataset: children - 111111111 - span attribute"
+                  }
+                }
+              ],
+              "endTimeUnixNano": 1111111110999999999,
+              "kind": 2,
+              "name": "example-dataset: children - 111111111 - span name",
+              "parentSpanId": "1111111113C1B173",
+              "spanId": "1111111113C1B174",
+              "startTimeUnixNano": 1111111110000000001,
+              "traceId": "1111111118038103D269B633813FC60C"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

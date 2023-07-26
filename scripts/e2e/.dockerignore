@@ -1,0 +1,5 @@
+flog.log
+flog.log*
+stats-*
+log.log*
+collector-logs.log

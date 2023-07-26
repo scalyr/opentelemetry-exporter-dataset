@@ -1,0 +1,127 @@
+name: Check code quality
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 4 * * *'
+
+permissions:
+  contents: read
+
+# We don't want to cancel any redundant runs on main so we use run_id when head_ref is
+# not available
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  code_quality_lint:
+    name: Code Quality, Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+          token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.19
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            examples/**/go.sum
+
+      - name: Install Go Dev tools
+        run: |
+          ./dataset-go/scripts/install-dev-tools.sh
+
+      - name: Install pre-commit
+        run: |
+          python -m pip install -U pip
+          python -m pip install pre-commit
+
+      - name: Install pre-commit hooks
+        run: |
+          pre-commit install
+
+      - name: Run pre-commit
+        run: |
+          pre-commit run -a
+
+      - name: Notify Slack on Failure
+        if: ${{ failure() && github.ref_name == 'main' }}
+        uses: act10ns/slack@ed1309ab9862e57e9e583e51c7889486b9a00b0f # v2.0.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
+          channel: '#eng-dataset-o11y'
+
+  unit_tests:
+    name: OTel Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+          token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.19
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            examples/**/go.sum
+
+      - name: Install Go Dev tools
+        run: |
+          ./dataset-go/scripts/install-dev-tools.sh
+
+      - name: OTel Unit Tests
+        run: |
+          make test
+
+      - name: Code Coverage
+        run: |
+          make coverage
+
+      - name: Upload coverage reports to Codecov
+        # TODO: Re-enable once repo is public
+        if: false
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./scalyr-opentelemetry-collector-contrib/exporter/datasetexporter/coverage.txt
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Notify Slack on Failure
+        if: ${{ failure() && github.ref_name == 'main' }}
+        uses: act10ns/slack@ed1309ab9862e57e9e583e51c7889486b9a00b0f # v2.0.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
+          channel: '#eng-dataset-o11y'

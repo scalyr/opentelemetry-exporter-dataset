@@ -1,0 +1,377 @@
+name: Benchmarks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 4 * * *'
+
+permissions:
+  contents: read
+
+# We don't want to cancel any redundant runs on main so we use run_id when head_ref is
+# not available
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  # Special orphan git branch which is used to store benchmark results
+  BENCHMARK_RESULTS_BRANCH_NAME: "benchmark-results-dont-push-manually"
+
+jobs:
+  benchmarks_local_dummy_server:
+    name: Benchmarks - Local Dummy Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+          token: ${{ github.token }}
+
+      - name: Build Docker Images
+        uses: ./.github/actions/build-docker-images/
+
+      - name: Prepare Test Environment
+        run: |
+          # Store value so we can reference it in other steps
+          export TEST_RUN_SERVERHOST="otel-cicd-benchmarks-e2e-local-dummy-server-mock-loglines-${GITHUB_SHA}-${GITHUB_RUN_ID}"
+
+          echo "TEST_RUN_SERVERHOST=${TEST_RUN_SERVERHOST}" >> ${GITHUB_ENV}
+
+      - name: Install required tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          npm install invert-markdown-table@1.2.0
+
+      - name: Run Benchmark
+        working-directory: ./scripts/e2e
+        run: |
+          sudo usermod -aG docker $USER
+          ./test.sh --check-limit 300
+
+      - name: Print Results
+        id: benchmark-result-json
+        run: |
+          result_multiline=$(cat scripts/e2e/benchmark.log | tail -1 | jq -C)
+          result_online=$(cat scripts/e2e/benchmark.log | tail -1 | jq -c)
+          echo -e "${result_multiline}"
+          echo "json=[$result_online]" >> "$GITHUB_OUTPUT"
+
+      - name: Store Results as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results-local-dummy-server
+          path: |
+            scripts/e2e/benchmark.log
+            scripts/e2e/collector-logs.log
+            scripts/e2e/stats-col-*.json
+
+      - name: Convert Result to Markdown Table
+        uses: buildingcash/json-to-markdown-table-action@3212cd4ed03822b88cc1f1f96353100a3ef98474 # v1.0.0
+        id: md-table
+        with:
+          json: ${{ steps.benchmark-result-json.outputs.json }}
+
+      - name: Print Table and Add Job Summary
+        run: |
+          result=$(echo "${{ steps.md-table.outputs.table }}" | awk '{$1=$1;print}' | node scripts/ci/invert_markdown_table.js)
+
+          echo "# Benchmark Results" > results.md
+          echo "Those benchmarks utilize local dummy addEvents server and mock pre-generated log lines" >> results.md
+          echo "Meaning of the columns is in the 'scripts/e2e/README.md'." >> results.md
+          echo "${result}" >> results.md
+          echo "" >> results.md
+          cat results.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Notify Slack on Failure
+        if: ${{ failure() && github.ref_name == 'master' }}
+        uses: act10ns/slack@ed1309ab9862e57e9e583e51c7889486b9a00b0f # v2.0.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
+          channel: '#eng-dataset-o11y'
+
+      - name: Stop containers
+        if: always()
+        working-directory: ./scripts/e2e
+        run: |
+          docker compose down
+
+  benchmarks_local_dummy_server_commit_results:
+    name: Commit Results To a Branch
+    runs-on: ubuntu-latest
+    needs:
+      - benchmarks_local_dummy_server
+    # We only want to run this job for push / merge to master and not also for cron runs
+    if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
+
+    permissions:
+      actions: write  # Needed for skip-duplicate-jobs job
+      contents: write  # Needed so we can push benchmark results
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: "${{ env.BENCHMARK_RESULTS_BRANCH_NAME }}"
+          token: ${{ github.token }}
+
+      # There is a known race / bug so sometimes this step will fail, see
+      # https://github.com/actions/download-artifact/issues/140#issuecomment-1314062872 for details
+      - name: Download result artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: benchmark-results-local-dummy-server
+          path: /tmp/
+
+      - name: Commit Results to Branch
+        run: |
+          git config --global user.email "noreply-cicd@scalyr.com"
+          git config --global user.name "GHA CI/CD automation"
+
+          # Print it for troubleshooting, etc.
+          cat /tmp/benchmark.log
+
+          # File may contain multiple old results and we only want the last (more recent) one
+          cat /tmp/benchmark.log | tail -1 >> benchmark-results.json
+
+          # Sanity check to ensure the file indeed contains current / todays results
+          cat benchmark-results.json | grep "$(date +%Y-%m-%d)"
+          git add benchmark-results.json
+          git commit -m "Add latest benchmark results on $(date +%Y-%m-%d)"
+
+          git push origin "${{ env.BENCHMARK_RESULTS_BRANCH_NAME }}"
+
+      - name: Notify Slack on Failure
+        if: ${{ failure() && github.ref_name == 'master' }}
+        uses: act10ns/slack@ed1309ab9862e57e9e583e51c7889486b9a00b0f # v2.0.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
+          channel: '#eng-dataset-o11y'
+
+  benchmarks_dataset_prod_server_mock_loglines:
+    name: Benchmarks - DataSet Prod US - mock log lines
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+          token: ${{ github.token }}
+
+      - name: Checkout Agent Repository
+        uses: actions/checkout@v3
+        with:
+          repository: "scalyr/scalyr-agent-2"
+          path: "scalyr-agent-2"
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          python-version: 3.11
+
+      - name: Install Scalyr Tool
+        run: |
+          curl https://raw.githubusercontent.com/scalyr/scalyr-tool/master/scalyr > scalyr
+          chmod +x scalyr
+          sudo mv scalyr /usr/local/bin
+
+      - name: Build Docker Images
+        uses: ./.github/actions/build-docker-images/
+
+      - name: Prepare Test Environment
+        run: |
+          # Store value so we can reference it in other steps
+          export TEST_RUN_SERVERHOST="otel-cicd-benchmarks-e2e-prod-us-mock-loglines-${GITHUB_SHA}-${GITHUB_RUN_ID}"
+          export SCALYR_QUERY_SCRIPT_PATH="./scalyr-agent-2/scripts/cicd/scalyr-query.sh"
+
+          echo "TEST_RUN_SERVERHOST=${TEST_RUN_SERVERHOST}" >> ${GITHUB_ENV}
+          echo "SCALYR_QUERY_SCRIPT_PATH=${SCALYR_QUERY_SCRIPT_PATH}" >> ${GITHUB_ENV}
+
+      - name: Install required tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          npm install invert-markdown-table@1.2.0
+
+      - name: Run Benchmark
+        working-directory: ./scripts/e2e
+        env:
+          DATASET_URL: "https://app.scalyr.com"
+          DATASET_API_KEY: "${{ secrets.DATASET_PRODUS_CLOUDTECH_TESTING_WRITELOGS_TOKEN }}"
+        run: |
+          sudo usermod -aG docker $USER
+          ./test.sh --check-limit 100
+
+      - name: Verify Data Has Been Ingested
+        env:
+          # Needed for scalyr-tool
+          scalyr_server: "https://app.scalyr.com"
+          scalyr_readlog_token: "${{ secrets.DATASET_PRODUS_CLOUDTECH_TESTING_READLOGS_TOKEN }}"
+        run: |
+          # TODO: Add more advanced checks and verify all data has been ingested and ingested
+          # correctly. For that we will also need to update data so each message includes unique
+          # incremental counter.
+          ${SCALYR_QUERY_SCRIPT_PATH} \
+            'serverHost="'${TEST_RUN_SERVERHOST}'"' \
+            'message contains "AAAAAAAAAAAAAAA"'
+
+      - name: Print Results
+        id: benchmark-result-json
+        run: |
+          result_multiline=$(cat scripts/e2e/benchmark.log | tail -1 | jq -C)
+          result_online=$(cat scripts/e2e/benchmark.log | tail -1 | jq -c)
+          echo -e "${result_multiline}"
+          echo "json=[$result_online]" >> "$GITHUB_OUTPUT"
+
+      - name: Store Results as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results-dataset-prod-us
+          path: |
+            scripts/e2e/benchmark.log
+            scripts/e2e/collector-logs.log
+            scripts/e2e/stats-col-*.json
+
+      - name: Convert Result to Markdown Table
+        uses: buildingcash/json-to-markdown-table-action@3212cd4ed03822b88cc1f1f96353100a3ef98474 # v1.0.0
+        id: md-table
+        with:
+          json: ${{ steps.benchmark-result-json.outputs.json }}
+
+      - name: Print Table and Add Job Summary
+        run: |
+          result=$(echo "${{ steps.md-table.outputs.table }}" | awk '{$1=$1;print}' | node scripts/ci/invert_markdown_table.js)
+
+          echo "# Benchmark Results" > results.md
+          echo "Those benchmarks utilize DataSet Prod US and mock pre-generated log lines" >> results.md
+          echo "Meaning of the columns is in the 'scripts/e2e/README.md'." >> results.md
+          echo "${result}" >> results.md
+          echo "" >> results.md
+          cat results.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Notify Slack on Failure
+        if: ${{ failure() && github.ref_name == 'master' }}
+        uses: act10ns/slack@ed1309ab9862e57e9e583e51c7889486b9a00b0f # v2.0.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
+          channel: '#eng-dataset-o11y'
+
+      - name: Stop containers
+        if: always()
+        working-directory: ./scripts/e2e
+        run: |
+          docker compose down
+
+  benchmarks_dataset_prod_server_telemetrygen:
+    name: Benchmarks - DataSet Prod US - telemetrygen
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+          token: ${{ github.token }}
+
+      # Needed so we can build telemetrygen locally - sadly it's currently not available for arm so
+      # we need to use this workaround
+      - name: Checkout OTel Contrib Repository
+        uses: actions/checkout@v3
+        with:
+          repository: "open-telemetry/opentelemetry-collector-contrib"
+          path: "opentelemetry-collector-contrib"
+
+      - name: Checkout Agent Repository
+        uses: actions/checkout@v3
+        with:
+          repository: "scalyr/scalyr-agent-2"
+          path: "scalyr-agent-2"
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          python-version: 3.11
+
+      - name: Install Scalyr Tool
+        run: |
+          curl https://raw.githubusercontent.com/scalyr/scalyr-tool/master/scalyr > scalyr
+          chmod +x scalyr
+          sudo mv scalyr /usr/local/bin
+
+      - name: Prepare Docker buildx
+        uses: docker/setup-buildx-action@v2
+
+      # TODO(Tomaz): Set up image / layer caching to speed up the build
+      - name: Build Telemetrygen Docker Image
+        working-directory: ./opentelemetry-collector-contrib
+        run: |
+          make docker-telemetrygen
+
+      - name: Build Other Docker Images
+        uses: ./.github/actions/build-docker-images/
+
+      - name: Prepare Test Environment
+        run: |
+          # Store value so we can reference it in other steps
+          export TEST_RUN_SERVERHOST="otel-cicd-benchmarks-e2e-telemetrygen-${GITHUB_SHA}-${GITHUB_RUN_ID}"
+          export SCALYR_QUERY_SCRIPT_PATH="./scalyr-agent-2/scripts/cicd/scalyr-query.sh"
+
+          echo "TEST_RUN_SERVERHOST=${TEST_RUN_SERVERHOST}" >> ${GITHUB_ENV}
+          echo "SCALYR_QUERY_SCRIPT_PATH=${SCALYR_QUERY_SCRIPT_PATH}" >> ${GITHUB_ENV}
+
+      - name: Run Benchmarks
+        working-directory: ./scripts/benchmarking
+        env:
+          DATASET_URL: "https://app.scalyr.com"
+          DATASET_API_KEY: "${{ secrets.DATASET_PRODUS_CLOUDTECH_TESTING_WRITELOGS_TOKEN }}"
+        run: |
+          ./test.sh
+
+      - name: Verify Data Has Been Ingested
+        env:
+          # Needed for scalyr-tool
+          scalyr_server: "https://app.scalyr.com"
+          scalyr_readlog_token: "${{ secrets.DATASET_PRODUS_CLOUDTECH_TESTING_READLOGS_TOKEN }}"
+        run: |
+          # TODO: Add more advanced checks and verify all data has been ingested and ingested
+          # correctly. For that we will also need to update data so each message includes unique
+          # incremental counter.
+          ${SCALYR_QUERY_SCRIPT_PATH} \
+            'resource.attributes.serverHost="'${TEST_RUN_SERVERHOST}'"' \
+            'resource.attributes.key="A"'
+
+      - name: Notify Slack on Failure
+        if: ${{ failure() && github.ref_name == 'main' }}
+        uses: act10ns/slack@ed1309ab9862e57e9e583e51c7889486b9a00b0f # v2.0.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
+          channel: '#eng-dataset-o11y'
+
+      - name: Stop containers
+        if: always()
+        working-directory: ./scripts/benchmarking
+        run: |
+          docker compose down

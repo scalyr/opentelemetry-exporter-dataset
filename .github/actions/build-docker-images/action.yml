@@ -1,0 +1,50 @@
+# This action builds various Docker images for local components. Those images are used by various
+# different type of end to end tests. Doing it as an action, allows us to reduce code duplication.
+name: "Build Docker Images"
+description: "Build various local Docker images which are used by the tests"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Build OTel Collector Image
+      uses: docker/build-push-action@v4
+      with:
+        tags: otelcol-dataset:latest
+        context: .
+        push: false
+        # NOTE 1: We need to use load true so image is exported to Docker and available to other
+        # steps in the workflow
+        # NOTE 2: load / export currently doesn't support multiple arch images so for now we only
+        # build x86 ones
+        load: true
+        platforms: linux/amd64
+        #platforms: linux/amd64,linux/arm64
+        cache-from: type=gha,scope=${{ github.ref_name }}-otel-dev
+        cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-otel-dev
+
+    - name: Build Dummy Server Image
+      uses: docker/build-push-action@v4
+      with:
+        tags: dataset-dummy-server:latest
+        context: dummy-server
+        file: ./dummy-server/Dockerfile
+        push: false
+        load: true
+        platforms: linux/amd64
+        cache-from: type=gha,scope=${{ github.ref_name }}-dummy-server
+        cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-dummy-server
+
+    - name: Build Logs Generator Image
+      uses: docker/build-push-action@v4
+      with:
+        tags: logs-generator:latest
+        context: logs-generator
+        file: ./logs-generator/Dockerfile
+        push: false
+        load: true
+        platforms: linux/amd64
+        cache-from: type=gha,scope=${{ github.ref_name }}-logs-generator
+        cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-logs-generator

@@ -1,0 +1,77 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  # https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/filelogreceiver/README.md
+  filelog/flog:
+    include: [ ./scripts/e2e/log.log.used.* ]
+    start_at: beginning
+    include_file_path: true
+    retry_on_failure:
+      enabled: true
+
+processors:
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 5s
+  memory_limiter:
+    limit_mib: 8186
+    spike_limit_mib: 1024
+    check_interval: 15s
+extensions:
+  zpages:
+  memory_ballast:
+    size_mib: 256
+
+exporters:
+  logging:
+    loglevel: debug
+  dataset/logs:
+    dataset_url: ${env:DATASET_URL}
+    api_key: ${env:DATASET_API_KEY}
+    buffer:
+      max_lifetime: 5s
+      group_by:
+        - attributes.container_id
+        - attributes.log.file.name
+      retry_initial_interval: 10s
+      retry_max_interval: 30s
+      retry_max_elapsed_time: 600s
+    retry_on_failure:
+      max_interval: 30s
+      max_elapsed_time: 600s
+    logs:
+      export_resource_info_on_event: false
+  dataset/traces:
+    dataset_url: ${env:DATASET_URL}
+    api_key: ${env:DATASET_API_KEY}
+    buffer:
+      max_lifetime: 15s
+      group_by:
+        - resource_service.instance.id
+      retry_initial_interval: 10s
+      retry_max_interval: 30s
+      retry_max_elapsed_time: 600s
+    retry_on_failure:
+      max_interval: 30s
+      max_elapsed_time: 600s
+
+service:
+  extensions: [zpages, memory_ballast]
+  pipelines:
+    traces:
+      receivers: [ otlp ]
+      processors: [ memory_limiter, batch ]
+      exporters: [ logging, dataset/traces ]
+    metrics:
+      receivers: [ otlp ]
+      processors: [ memory_limiter, batch ]
+      exporters: [ logging ]
+    logs:
+      receivers: [ otlp, filelog/flog ]
+      processors: [ memory_limiter, batch ]
+      exporters: [ logging, dataset/logs ]

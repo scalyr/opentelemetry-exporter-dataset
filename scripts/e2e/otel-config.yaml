@@ -1,0 +1,54 @@
+receivers:
+  # https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/filelogreceiver/README.md
+  filelog/log:
+    include: [ "/tmp/log.log.used.*" ]
+    start_at: beginning
+    include_file_path: true
+    retry_on_failure:
+      enabled: true
+
+exporters:
+  dataset/logs:
+    api_key: ${env:DATASET_API_KEY}
+    dataset_url: ${env:DATASET_URL}
+    # Needed since telemetrygen adds custom attributes under "resource.attribute.<attribute name>"
+    # and not under "attribute.<attribute name>" like in other scenarios (e.g. attributes
+    # processor)
+    logs:
+      export_resource_info_on_event: true
+    buffer:
+      max_lifetime: 5s
+      group_by:
+        - attributes.log.file.name
+        - attributes.log.file.path
+  logging:
+    verbosity: detailed
+    sampling_thereafter: 2
+
+processors:
+  # Right now we don't support specifying serverHost / server fields as part of the dataset
+  # exporter config. This means we can't ensure uniquiness across test runs which means we
+  # can't assert in the CI at the end of the benchmark that data has been correctly ingested.
+  # This is a short term workaround until that functionality is implemented in our exporter.
+  # It adds unique attribute to each log record.
+  attributes/add_unique_ci_run_id:
+    actions:
+      - key: serverHost
+        action: insert
+        value: "${env:TEST_RUN_SERVERHOST}"
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 5s
+
+service:
+#  telemetry:
+#    logs:
+#      level: "debug"
+  pipelines:
+    logs:
+      receivers: [filelog/log]
+      processors: [batch, attributes/add_unique_ci_run_id]
+      exporters: [dataset/logs]
+      # Uncoment for troubleshooting
+      #exporters: [logging, dataset/logs]

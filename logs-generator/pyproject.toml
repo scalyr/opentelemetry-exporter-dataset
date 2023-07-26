@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "logs-generator"
+version = "0.0.1"
+description = ""
+authors = ["Martin Majlis <martin.majlis@sentinelone.com>"]
+readme = "README.md"
+packages = [{include = ".."}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[tool.poetry.scripts]
+generate = "generate:main"
+
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.4.1"
+black = "^23.3.0"
+flake8 = "^6.0.0"
+isort = "^5.12.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,41 @@
+exclude: >
+  (?x)^(
+      dataset-go|
+      opentelemetry-collector-contrib|
+      otelcol-dataset
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-json
+        exclude: demo-doordash/charts/fluent-bit/dashboards/fluent-bit.json
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-toml
+      - id: check-xml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: pretty-format-json
+        args: ["--autofix"]
+      - id: trailing-whitespace
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.0
+    hooks:
+      - id: go-fmt
+      - id: go-imports
+      - id: go-cyclo
+      - id: validate-toml
+      - id: no-go-testing
+      - id: go-mod-vendor
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.9.0
+    hooks:
+    -   id: shellcheck
+        args: ["--severity=warning"]  # Optionally only show errors and warnings

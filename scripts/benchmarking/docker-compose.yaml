@@ -1,0 +1,92 @@
+# Copyright The OpenTelemetry Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: '3.9'
+x-default-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "5m"
+    max-file: "2"
+
+networks:
+  default:
+    name: otel-bench
+    driver: bridge
+
+services:
+  # OpenTelemetry Collector
+  dataset-collector-bench:
+    image: otelcol-dataset
+    container_name: dataset-collector-bench
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+    restart: unless-stopped
+    command: [ "--config=/tmp/otel-config.yaml" ]
+    environment:
+      - DATASET_API_KEY
+      - DATASET_URL
+    volumes:
+      - .:/tmp/
+    ports:
+      - "4318:4318"
+      - "4317:4317"
+    logging: *logging
+
+  telemetrygen-logs-dataset:
+    # NOTE: Right now upstream image is only available for x86 and not arm. Which means it
+    # won't work on local m1/m2 MBPs and ARM EC2 instances so we build arm version locally
+    # Image is built as part of the CI/CD workflow.
+    # image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+    # TODO(Tomaz): We need to use unique serverHost for each (CI/CD) run so we can reliably assert
+    # on the data to verify it has been successfully and correctly ingested.
+    image: telemetrygen:latest
+    container_name: telemetrygen-logs-dataset
+    command:
+      - logs
+      - --otlp-endpoint=dataset-collector-bench:4317
+      - --otlp-insecure
+      # Temporary hack until serverHost functionality support is implemented in otel collector
+      # plugin
+      - --otlp-attributes=serverHost="${TEST_RUN_SERVERHOST:-'undefined'}"
+      - --otlp-attributes=key="A"
+      - --otlp-attributes=A100="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      - --otlp-attributes=B100="BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+      - --otlp-attributes=C100="CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+      - --rate=300        # generate 300 records per second
+      - --duration=3m    # generate it for 3 minutes
+      - --workers=4      # run 4 workers
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+    depends_on:
+      dataset-collector-bench:
+        condition: service_started
+
+  # Dummy Server
+  dataset-dummy-server-e2e:
+    image: dataset-dummy-server
+    container_name: dataset-dummy-server-bench
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    logging: *logging

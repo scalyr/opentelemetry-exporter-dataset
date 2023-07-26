@@ -1,0 +1,31 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  dataset:
+    api_key: ${env:DATASET_API_KEY}
+    dataset_url: ${env:DATASET_URL}
+    # Needed since telemetrygen adds custom attributes under "resource.attribute.<attribute name>"
+    # and not under "attribute.<attribute name>" like in other scenarios (e.g. attributes
+    # processor)
+    logs:
+      export_resource_info_on_event: true
+    buffer:
+      max_lifetime: 10s
+      group_by:
+        - resource.attributes.key
+
+processors:
+  batch:
+    send_batch_size: 10000
+    timeout: 10s
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [dataset]

@@ -1,0 +1,63 @@
+# Copyright The OpenTelemetry Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: '3.9'
+x-default-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "5m"
+    max-file: "2"
+
+networks:
+  default:
+    name: otel-e2e
+    driver: bridge
+
+services:
+  # OpenTelemetry Collector
+  dataset-collector-e2e:
+    image: otelcol-dataset
+    container_name: dataset-collector-e2e
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 8G
+    restart: "no"
+    command: [ "--config=/tmp/otel-config.yaml" ]
+    environment:
+      - DATASET_URL
+      - DATASET_API_KEY
+      - TEST_RUN_SERVERHOST
+    volumes:
+      - .:/tmp/
+      # - /var/lib/docker/containers:/var/lib/docker/containers
+    ports:
+      - "4318:4318"     # OTLP over HTTP receiver
+    logging: *logging
+    depends_on:
+      - dataset-dummy-server-e2e
+
+  # Dummy Server
+  dataset-dummy-server-e2e:
+    image: dataset-dummy-server
+    container_name: dataset-dummy-server-e2e
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    logging: *logging

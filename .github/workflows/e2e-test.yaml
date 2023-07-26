@@ -1,0 +1,72 @@
+name: E2E Test - Reliability
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 4 * * *'
+
+permissions:
+  contents: read
+
+# We don't want to cancel any redundant runs on main so we use run_id when head_ref is
+# not available
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  e2e_tests:
+    name: Reliability End to End Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+          token: ${{ github.token }}
+
+      - name: Build Docker Images
+        uses: ./.github/actions/build-docker-images/
+
+      # Known issue with occasional flaky test so we retry on failure to partially avoid flaky
+      # test issue until root cause is found and resolved.
+      - name: Run Test
+        uses: nick-fields/retry@943e742917ac94714d2f408a0e8320f2d1fcafcd # v2.8.3
+        with:
+          shell: bash
+          timeout_seconds: 300
+          max_attempts: 3
+          command: |
+            # Used to store api stats. Need to change permissions / owner so docker containers can
+            # write to it.
+            # Alternative would be to ensure all the docker containers which are started as part of
+            # docker compose setup utilize the same uid and gid as GHA runner which is more
+            # complicated.
+            cd ./scripts/reliability
+
+            chmod 777 ./
+            ./test.sh
+
+            sleep 10
+
+      - name: Notify Slack on Failure
+        if: ${{ failure() && github.ref_name == 'main' }}
+        uses: act10ns/slack@ed1309ab9862e57e9e583e51c7889486b9a00b0f # v2.0.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
+          channel: '#eng-dataset-o11y'
+
+      - name: Stop containers
+        if: always()
+        working-directory: ./scripts/reliability
+        run: |
+          docker compose down
