@@ -27,6 +27,7 @@ jobs:
   benchmarks_local_dummy_server:
     name: Benchmarks - Local Dummy Server
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -114,6 +115,7 @@ jobs:
       - benchmarks_local_dummy_server
     # We only want to run this job for push / merge to master and not also for cron runs
     if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
+    timeout-minutes: 5
 
     permissions:
       actions: write  # Needed for skip-duplicate-jobs job
@@ -165,6 +167,7 @@ jobs:
   benchmarks_dataset_prod_server_mock_loglines:
     name: Benchmarks - DataSet Prod US - mock log lines
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -284,6 +287,7 @@ jobs:
   benchmarks_dataset_prod_server_telemetrygen:
     name: Benchmarks - DataSet Prod US - telemetrygen
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout Code
