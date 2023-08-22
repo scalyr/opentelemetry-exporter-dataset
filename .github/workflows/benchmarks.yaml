@@ -27,7 +27,7 @@ jobs:
   benchmarks_local_dummy_server:
     name: Benchmarks - Local Dummy Server
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -67,6 +67,8 @@ jobs:
           echo "json=[$result_online]" >> "$GITHUB_OUTPUT"
 
       - name: Store Results as Artifact
+        # We also store artifacts on failure to make troubleshooting easier
+        if: ${{ success() || failure() }}
         uses: actions/upload-artifact@v3
         with:
           name: benchmark-results-local-dummy-server

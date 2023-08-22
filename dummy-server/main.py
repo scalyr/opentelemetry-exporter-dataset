@@ -7,7 +7,7 @@ import logging
 import random
 from struct import unpack
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, Literal
 import zlib
 
 from fastapi import FastAPI
@@ -169,7 +169,8 @@ app.router.route_class = CompressedRoute
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     exc_str = f"{exc}".replace("\n", " ").replace("   ", " ")
-    logging.error(f"{request}: {exc_str}")
+    logging.error(f"{request.__dict__}: {exc_str}")
+    logging.error(f"Invalid request body: {exc.body}")
     content = {"status": "10422", "message": exc_str, "data": None}
     return JSONResponse(
         content=content, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -217,11 +218,17 @@ class SessionInfo(BaseModel):
     serverId: Optional[str]
     region: Optional[str]
 
+class Empty(BaseModel):
+    class Config:
+        extra = "forbid"
+
 
 class AddEventsRequestParams(BaseModel):
     token: str
     session: str
-    sessionInfo: Optional[SessionInfo]
+    # NOTE: sessionInfo being empty dict aka {} is valid and accepted by DataSet API so we also
+    # handle it here
+    sessionInfo: Optional[SessionInfo] | Empty
     events: Optional[List[Event]]
     threads: Optional[List[Thread]]
     logs: Optional[List[Log]]
