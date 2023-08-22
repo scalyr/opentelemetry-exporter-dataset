@@ -27,7 +27,7 @@ jobs:
   benchmarks_local_dummy_server:
     name: Benchmarks - Local Dummy Server
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
