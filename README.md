@@ -5,7 +5,7 @@
 [![E2E Test - Reliability](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/e2e-test.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/e2e-test.yaml)
 [![Benchmarks](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/benchmarks.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/benchmarks.yaml)
 [![Release Image](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/release-image.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/release-image.yaml)
-[![Docker Pulls](https://img.shields.io/docker/pulls/test4scalyr/opentelemetry-collector-contrib)](https://hub.docker.com/r/test4scalyr/opentelemetry-collector-contrib/tags)
+[![Docker Pulls](https://img.shields.io/docker/pulls/scalyr/opentelemetry-collector-contrib)](https://hub.docker.com/r/scalyr/opentelemetry-collector-contrib/tags)
 
 Main purpose of this repository is to allow testing of changes in the [dataset-go](./dataset-go) library or
 [open-telemetry-contrib](./scalyr-opentelemetry-collector-contrib) exporter before we publish them.
@@ -29,7 +29,7 @@ This repository contains 2 sets of pre-built Docker images for ``amd64`` and ``a
    components - [GitHub](https://github.com/scalyr/opentelemetry-exporter-dataset/pkgs/container/opentelemetry-exporter-dataset).
 2. Pre-built image with the latest development version of the dataset exporter plugin
    (`datasetexporter-latest` branch from [our fork](https://github.com/scalyr/opentelemetry-collector-contrib/))
-   with all other upstream otel contrib components - [Docker Hub](https://hub.docker.com/r/test4scalyr/opentelemetry-collector-contrib/tags).
+   with all other upstream otel contrib components - [Docker Hub](https://hub.docker.com/r/scalyr/opentelemetry-collector-contrib/tags).
 
 Second image can act as a direct drop-in replacement for the upstream
 `otel/opentelemetry-collector-contrib` image (e.g. in an upstream otel collector helm chart or
