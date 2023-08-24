@@ -110,8 +110,6 @@ jobs:
           make coverage
 
       - name: Upload coverage reports to Codecov
-        # TODO: Re-enable once repo is public
-        if: false
         uses: codecov/codecov-action@v3
         with:
           files: ./scalyr-opentelemetry-collector-contrib/exporter/datasetexporter/coverage.txt
