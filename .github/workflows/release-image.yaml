@@ -84,7 +84,7 @@ jobs:
         with:
           file: Dockerfile
           context: .
-          push: ${{ github.ref_name == 'main' }}
+          if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository }}:latest
             ${{ steps.meta.outputs.tags }}
@@ -127,7 +127,7 @@ jobs:
 
       - name: Push Dev Image To Docker Hub Account
         uses: docker/build-push-action@v4
-        if: ${{ github.ref_name == 'main' }}
+        if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
         with:
           file: Dockerfile.contrib_datasetexporter_latest
           context: .
