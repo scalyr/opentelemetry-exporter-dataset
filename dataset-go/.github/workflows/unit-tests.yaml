@@ -1,0 +1,64 @@
+name: Unit Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 6 * * *'
+
+permissions:
+  actions: write  # Needed for skip-duplicate-jobs job
+  contents: read
+
+jobs:
+  # Special job which automatically cancels old runs for the same branch, prevents runs for the
+  # same file set which has already passed, etc.
+  pre_job:
+    name: Skip Duplicate Jobs Pre Job
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@12aca0a884f6137d619d6a8a09fcc3406ced5281 # v5.3.0
+        with:
+          cancel_others: 'true'
+          github_token: ${{ github.token }}
+
+  build:
+    strategy:
+      matrix:
+        go: ['1.20', '1.21']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+          cache-dependency-path: |
+            go.sum
+      - name: Run go mod vendor
+        run: |
+          go mod vendor
+      - name: Code tests
+        run: |
+          make test
+      - name: Run Tests Many Times
+        # Run test multiple times to check for flaky tests
+        if: github.ref_name == 'main'
+        run: |
+          make test-many-times COUNT=2

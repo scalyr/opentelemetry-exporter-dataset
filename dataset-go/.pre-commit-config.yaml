@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-json
+        exclude: demo-doordash/charts/fluent-bit/dashboards/fluent-bit.json
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-toml
+      - id: check-xml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: pretty-format-json
+        exclude: |
+          (?x)^(
+            test/testdata/buffer_test_payload_injection.json|
+            test/testdata/buffer_test_payload_full.json
+          )
+      - id: trailing-whitespace
+
+  - repo: https://github.com/Bahjat/pre-commit-golang
+    rev: v1.0.3
+    hooks:
+      - id: go-fmt-import
+      - id: go-lint
+      - id: gofumpt
+      - id: go-err-check
+      - id: golangci-lint
+      - id: go-static-check
+      # - id: go-ruleguard # requires https://github.com/quasilyte/go-ruleguard
+      #    args: [rules/rules.go] # required
