@@ -5,6 +5,7 @@
 [![E2E Test - Reliability](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/e2e-test.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/e2e-test.yaml)
 [![Benchmarks](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/benchmarks.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/benchmarks.yaml)
 [![Release Image](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/release-image.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/release-image.yaml)
+[![codecov](https://codecov.io/github/scalyr/opentelemetry-exporter-dataset/graph/badge.svg?token=EB9MPROGBO)](https://codecov.io/github/scalyr/opentelemetry-exporter-dataset)
 [![Docker Pulls](https://img.shields.io/docker/pulls/scalyr/opentelemetry-collector-contrib)](https://hub.docker.com/r/scalyr/opentelemetry-collector-contrib/tags)
 
 Main purpose of this repository is to allow testing of changes in the [dataset-go](./dataset-go) library or
