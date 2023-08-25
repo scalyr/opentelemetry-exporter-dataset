@@ -1,0 +1,35 @@
+{
+  "token":"token\",\"events\":[{}],\"foo\":\"bar",
+  "session":"session\",\"s\":\"S",
+  "sessionInfo":{
+    "serverType":"serverType\",\"sT\":\"T",
+    "serverId":"serverId\",\"sI\":\"I",
+    "region":"region\",\"r\":\"R"
+  },
+  "events":[
+    {
+      "thread":"TId\",\"i\":\"i",
+      "sev":3,
+      "ts":"0",
+      "attrs":{
+        "meh\",\"i\":\"i":1,
+        "message\",\"i\":\"i":"test\",\"i\":\"i"
+      }
+    }
+  ],
+  "threads":[
+    {
+      "id":"TId\",\"i\":\"i",
+      "name":"TName\",\"i\":\"i"
+    }
+  ],
+  "logs":[
+    {
+      "id":"LId\",\"i\":\"i",
+      "attrs":{
+        "LAttr1\",\"i\":\"i":"LVal1\",\"i\":\"i",
+        "LAttr2\",\"i\":\"i":"LVal2\",\"i\":\"i"
+      }
+    }
+  ]
+}
