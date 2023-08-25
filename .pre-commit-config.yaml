@@ -1,9 +1,9 @@
 exclude: >
   (?x)^(
-      dataset-go|
-      opentelemetry-collector-contrib|
-      opentelemetry-collector-releases|
-      scalyr-opentelemetry-collector-contrib
+      dataset-go/.*|
+      opentelemetry-collector-contrib/.*|
+      opentelemetry-collector-releases/.*|
+      scalyr-opentelemetry-collector-contrib/.*
   )$
 
 repos:
