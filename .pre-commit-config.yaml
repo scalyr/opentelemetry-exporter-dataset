@@ -2,7 +2,8 @@ exclude: >
   (?x)^(
       dataset-go|
       opentelemetry-collector-contrib|
-      otelcol-dataset
+      opentelemetry-collector-releases|
+      scalyr-opentelemetry-collector-contrib
   )$
 
 repos:
