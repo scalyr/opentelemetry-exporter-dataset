@@ -39,11 +39,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.20
+          go-version: "1.20"
           cache: true
           cache-dependency-path: |
-            go.sum
-            examples/**/go.sum
+            dataset-go/go.sum
+            opentelemetry-collector-contrib/go.sum
+            opentelemetry-collector-releases/go.sum
+            scalyr-opentelemetry-collector-contrib/go.sum
 
       - name: Install Go Dev tools
         run: |
@@ -91,11 +93,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.20
+          go-version: "1.20"
           cache: true
           cache-dependency-path: |
-            go.sum
-            examples/**/go.sum
+            dataset-go/go.sum
+            opentelemetry-collector-contrib/go.sum
+            opentelemetry-collector-releases/go.sum
+            scalyr-opentelemetry-collector-contrib/go.sum
 
       - name: Install Go Dev tools
         run: |
