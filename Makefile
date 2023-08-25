@@ -253,9 +253,9 @@ test-e2e:
 	cd scripts/e2e; \
 	./test.sh
 
-.PHONY: submodules-pull
-submodules-pull:
-	(cd dataset-go; pwd; git branch --show-current; git checkout .; git checkout main; git pull)
-	(cd opentelemetry-collector-contrib; pwd; git branch --show-current; git checkout .; git checkout main; git pull)
-	(cd opentelemetry-collector-releases; pwd; git branch --show-current; git checkout .; git checkout main; git pull)
-	(cd scalyr-opentelemetry-collector-contrib; pwd; git branch --show-current; git checkout .; git checkout main; git pull; git branch -D datasetexporter-latest; git checkout remotes/origin/datasetexporter-latest --track; git checkout datasetexporter-latest; git pull)
+.PHONY: subtrees-pull
+subtrees-pull:
+	git subtree pull --prefix dataset-go https://github.com/scalyr/dataset-go.git main --squash
+	git subtree pull --prefix opentelemetry-collector-contrib https://github.com/open-telemetry/opentelemetry-collector-contrib.git main --squash
+	git subtree pull --prefix opentelemetry-collector-releases https://github.com/open-telemetry/opentelemetry-collector-releases.git main --squash
+	git subtree pull --prefix scalyr-opentelemetry-collector-contrib https://github.com/scalyr/opentelemetry-collector-contrib.git datasetexporter-latest --squash

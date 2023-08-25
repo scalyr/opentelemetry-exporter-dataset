@@ -5,16 +5,13 @@
 [![E2E Test - Reliability](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/e2e-test.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/e2e-test.yaml)
 [![Benchmarks](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/benchmarks.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/benchmarks.yaml)
 [![Release Image](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/release-image.yaml/badge.svg)](https://github.com/scalyr/opentelemetry-exporter-dataset/actions/workflows/release-image.yaml)
+[![codecov](https://codecov.io/github/scalyr/opentelemetry-exporter-dataset/graph/badge.svg?token=EB9MPROGBO)](https://codecov.io/github/scalyr/opentelemetry-exporter-dataset)
 [![Docker Pulls](https://img.shields.io/docker/pulls/scalyr/opentelemetry-collector-contrib)](https://hub.docker.com/r/scalyr/opentelemetry-collector-contrib/tags)
 
 Main purpose of this repository is to allow testing of changes in the [dataset-go](./dataset-go) library or
 [open-telemetry-contrib](./scalyr-opentelemetry-collector-contrib) exporter before we publish them.
 This testing is usually done by either running existing "benchmarks" from the [scripts](scripts) folder or
 using them as inspiration for ad hoc testing.
-
-This repository contains several git submodules. Make sure, that you have their source code as well. You can do it:
-* during clone with: `git clone --recurse-submodules git@github.com:scalyr/opentelemetry-exporter-dataset.git`
-* afterward with: `git submodule update --init`
 
 ## Dependencies
 
@@ -70,7 +67,6 @@ If you want to use build your own collector, you can use following instructions:
          export GOPATH=/Users/$USER/go
          export PATH=$GOPATH/bin:$PATH
          ```
-     * If you receive `"open /Users/foo/w/opentelemetry-exporter-dataset/scalyr-opentelemetry-collector-contrib/exporter     /datasetexporter/go.mod: no such file or directory"` or similar error message when running this command, this means you haven't checked out the  submodules. See the section `Development` on how to do that.
   4. Prepare config for collector:
      * Example [config.yaml](config.yaml)
      * See [documentation](scalyr-opentelemetry-collector-contrib/exporter/datasetexporter/README.md) for configuration option
@@ -108,13 +104,9 @@ For the configuration option you should check [documentation](datasetexporter/RE
 
 ## Development
 
-1. Make sure that you have checked out submodules:
+1. Update all the repository subtrees to the latest version:
    * ```bash
-     git submodule update --init
-     ```
-2. Update all the repositories to the latest version:
-   * ```bash
-     make submodules-pull
+     make subtrees-pull
      ```
 3. Build all images:
    * ```bash
@@ -133,12 +125,9 @@ from your development branches in the [dataset-go](./dataset-go) library or
 [open-telemetry-contrib](./scalyr-opentelemetry-collector-contrib) exporter.
 
 Workflow is:
-1. Checkout your development branch in submodules
+1. Checkout your development branch in a subtree (e.g. `./dataset-go` or `./scalyr-opentelemetry-collector-contrib` directory)
 2. Build collector
 3. Run collector with your changes
-
-Advantage of using submodules is that you can modify your code directly here and once you
-are happy, you can commit it, push it, and then check it out in your primary location.
 
 ## Continous Integration and Delivery (CI/CD)
 

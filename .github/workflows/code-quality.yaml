@@ -21,9 +21,12 @@ concurrency:
 
 jobs:
   code_quality_lint:
-    name: Code Quality, Lint
+    name: Code Quality, Lint - ${{ matrix.go }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      matrix:
+        go: ['1.20', '1.21']
 
     steps:
       - uses: actions/checkout@v3
@@ -39,11 +42,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.19
+          go-version: ${{ matrix.go }}
           cache: true
           cache-dependency-path: |
-            go.sum
-            examples/**/go.sum
+            dataset-go/go.sum
+            opentelemetry-collector-contrib/go.sum
+            opentelemetry-collector-releases/go.sum
+            scalyr-opentelemetry-collector-contrib/go.sum
 
       - name: Install Go Dev tools
         run: |
@@ -73,9 +78,12 @@ jobs:
           channel: '#eng-dataset-o11y'
 
   unit_tests:
-    name: OTel Unit Tests
+    name: OTel Unit Tests - ${{ matrix.go }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      matrix:
+        go: ['1.20', '1.21']
 
     steps:
       - uses: actions/checkout@v3
@@ -91,11 +99,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.19
+          go-version: ${{ matrix.go }}
           cache: true
           cache-dependency-path: |
-            go.sum
-            examples/**/go.sum
+            dataset-go/go.sum
+            opentelemetry-collector-contrib/go.sum
+            opentelemetry-collector-releases/go.sum
+            scalyr-opentelemetry-collector-contrib/go.sum
 
       - name: Install Go Dev tools
         run: |
@@ -111,6 +121,8 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
+        env:
+          token: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./scalyr-opentelemetry-collector-contrib/exporter/datasetexporter/coverage.txt
           fail_ci_if_error: true
