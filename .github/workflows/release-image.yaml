@@ -53,7 +53,7 @@ jobs:
       - name: Check for Secrets Availability
         id: secrets-check
         run: |
-          if [ "${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT }}" != "" ]; then
+          if [ "${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNTA }}" != "" ]; then
             echo "available=true" >> $GITHUB_OUTPUT;
           else
             echo "available=false" >> $GITHUB_OUTPUT;
