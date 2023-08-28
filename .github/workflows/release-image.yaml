@@ -50,6 +50,9 @@ jobs:
 
       - name: Log in to the Container registry - DockerHub
         uses: docker/login-action@v2
+        # We don't give dependabot access to secrets needed to push to the registry, but we still
+        # want dependabot PRs to run rest of the checks
+        if: ${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT != "" }}
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD_PROD_ACCOUNT }}
@@ -131,7 +134,7 @@ jobs:
         with:
           file: Dockerfile.contrib_datasetexporter_latest
           context: .
-          push: true
+          push: ${{ github.ref_name == 'main' }}
           tags: |
             scalyr/opentelemetry-collector-contrib:${{ github.sha }}
             scalyr/opentelemetry-collector-contrib:${{steps.current-time.outputs.date}}
