@@ -22,7 +22,9 @@ runs:
         load: true
         platforms: linux/amd64
         #platforms: linux/amd64,linux/arm64
-        cache-from: type=gha,scope=${{ github.ref_name }}-otel-dev
+        cache-from: |
+          type=gha,scope=main-otel-dev
+          type=gha,scope=${{ github.ref_name }}-otel-dev
         cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-otel-dev
 
     - name: Build Dummy Server Image
@@ -34,7 +36,9 @@ runs:
         push: false
         load: true
         platforms: linux/amd64
-        cache-from: type=gha,scope=${{ github.ref_name }}-dummy-server
+        cache-from: |
+          type=gha,scope=main-dummy-server
+          type=gha,scope=${{ github.ref_name }}-dummy-server
         cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-dummy-server
 
     - name: Build Logs Generator Image
@@ -46,5 +50,7 @@ runs:
         push: false
         load: true
         platforms: linux/amd64
-        cache-from: type=gha,scope=${{ github.ref_name }}-logs-generator
+        cache-from: |
+          type=gha,scope=main-logs-generator
+          type=gha,scope=${{ github.ref_name }}-logs-generator
         cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-logs-generator

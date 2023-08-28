@@ -106,7 +106,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ github.repository }}:${{steps.current-time.outputs.date}}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
-          cache-from: type=gha,scope=${{ github.ref_name }}-otel-dev
+          cache-from: |
+            type=gha,scope=main-otel-dev
+            type=gha,scope=${{ github.ref_name }}-otel-dev
           cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-otel-dev
 
       # This image contains latest version of DataSet exporter + all other otel contrib components
@@ -125,7 +127,9 @@ jobs:
             scalyr/opentelemetry-collector-contrib:${{steps.current-time.outputs.date}}
             scalyr/opentelemetry-collector-contrib:datasetexporter-latest
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ github.ref_name }}-otel-dev-upstream-compat
+          cache-from: |
+            type=gha,scope=main-otel-dev-upstream-compat
+            type=gha,scope=${{ github.ref_name }}-otel-dev-upstream-compat
           cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-otel-dev-upstream-compat
 
       # TODO: Run more complete sanity checks before pushing to confirm that image works
@@ -151,7 +155,9 @@ jobs:
             scalyr/opentelemetry-collector-contrib:datasetexporter-latest
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
-          cache-from: type=gha,scope=${{ github.ref_name }}-otel-dev-upstream-compat
+          cache-from: |
+            type=gha,scope=main-otel-dev-upstream-compat
+            type=gha,scope=${{ github.ref_name }}-otel-dev-upstream-compat
           cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-otel-dev-upstream-compat
 
       - name: Notify Slack on Failure
