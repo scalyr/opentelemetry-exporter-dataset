@@ -48,7 +48,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # We don't give dependabot access to secrets needed to push to the registry, but we still
+      # want dependabot PRs to run rest of the checks (minus docker login + push)
+      - name: Check for Secrets Availability
+        id: secrets-check
+        run: |
+          if [ "${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT }}" != "" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT;
+          else
+            echo "available=false" >> $GITHUB_OUTPUT;
+          fi
+
       - name: Log in to the Container registry - DockerHub
+        if: ${{ steps.secrets-check.outputs.available == 'true' }}
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT }}
@@ -80,11 +92,11 @@ jobs:
 
       # This image contains only DataSet exporter and minimum needed contrib components
       - name: Build and Push Image To GHCR
+        if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
         uses: docker/build-push-action@v4
         with:
           file: Dockerfile
           context: .
-          if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository }}:latest
             ${{ steps.meta.outputs.tags }}
@@ -126,12 +138,12 @@ jobs:
           docker run scalyr/opentelemetry-collector-contrib:${{ github.sha }} "components" | grep "\- dataset"
 
       - name: Push Dev Image To Docker Hub Account
-        uses: docker/build-push-action@v4
         if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
+        uses: docker/build-push-action@v4
         with:
           file: Dockerfile.contrib_datasetexporter_latest
           context: .
-          push: true
+          push: ${{ github.ref_name == 'main' }}
           tags: |
             scalyr/opentelemetry-collector-contrib:${{ github.sha }}
             scalyr/opentelemetry-collector-contrib:${{steps.current-time.outputs.date}}
