@@ -41,6 +41,16 @@ jobs:
           submodules: 'true'
           token: ${{ github.token }}
 
+      # Verify that version defined in the builder file and in dataset-go/pkg/version/version.go matches
+      - name: Verify dataset-go Versions Match
+        run: |
+          DATASET_GO_VERSION=$(cat dataset-go/pkg/version/version.go | grep Version | grep '= "' | awk '{print $3}' | tr -d '"')
+
+          echo "Verifying dataset-go version \"${DATASET_GO_VERSION}\" is present in otelcol-builder*.yaml files."
+
+          cat otelcol-builder.yaml | grep "github.com/scalyr/dataset-go" | grep "v${DATASET_GO_VERSION}"
+          cat otelcol-builder.datasetexporter-latest.yaml  | grep "github.com/scalyr/dataset-go" | grep "v${DATASET_GO_VERSION}"
+
       - name: Log in to the Container registry - GitHub
         uses: docker/login-action@v2
         with:
