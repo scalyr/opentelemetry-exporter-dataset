@@ -39,5 +39,5 @@ connectors:
 
 replaces:
   - github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.83.0 => ./../scalyr-opentelemetry-collector-contrib/exporter/datasetexporter
-  - github.com/scalyr/dataset-go v0.12.1 => ./../dataset-go
+  - github.com/scalyr/dataset-go v0.14.0 => ./../dataset-go
 #  github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.83.0 => github.com/scalyr/opentelemetry-collector-contrib/exporter/datasetexporter datasetexporter-latest
