@@ -255,7 +255,7 @@ test-e2e:
 
 .PHONY: subtrees-pull
 subtrees-pull:
-	git subtree pull --prefix dataset-go https://github.com/scalyr/dataset-go.git main --squash
-	git subtree pull --prefix opentelemetry-collector-contrib https://github.com/open-telemetry/opentelemetry-collector-contrib.git main --squash
+	git subtree pull --prefix dataset-go https://github.com/scalyr/dataset-go.git main --squash
+	git subtree pull --prefix opentelemetry-collector-contrib https://github.com/open-telemetry/opentelemetry-collector-contrib.git main --squash
 	git subtree pull --prefix opentelemetry-collector-releases https://github.com/open-telemetry/opentelemetry-collector-releases.git main --squash
 	git subtree pull --prefix scalyr-opentelemetry-collector-contrib https://github.com/scalyr/opentelemetry-collector-contrib.git datasetexporter-latest --squash
