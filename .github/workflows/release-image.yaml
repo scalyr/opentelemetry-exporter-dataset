@@ -48,13 +48,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # We don't give dependabot access to secrets needed to push to the registry, but we still
+      # want dependabot PRs to run rest of the checks (minus docker login + push)
+      - name: Check for Secrets Availability
+        id: secrets-check
+        run: |
+          if [ "${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT }}" != "" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT;
+          else
+            echo "available=false" >> $GITHUB_OUTPUT;
+          fi
+
       - name: Log in to the Container registry - DockerHub
         uses: docker/login-action@v2
-        # We don't give dependabot access to secrets needed to push to the registry, but we still
-        # want dependabot PRs to run rest of the checks
-        env:
-          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT }}
-        if: ${{ env.DOCKER_HUB_USERNAME != "" }}
+        if: ${{ steps.secrets-check.outputs.available == 'true' }}
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD_PROD_ACCOUNT }}
