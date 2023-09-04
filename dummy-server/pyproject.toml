@@ -8,7 +8,7 @@ packages = [{include = "dummy_server"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-fastapi = "^0.103.0"
+fastapi = "^0.103.1"
 uvicorn = "^0.21.1"
 pyhocon = "^0.3.60"
 
