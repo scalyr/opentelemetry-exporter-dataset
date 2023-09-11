@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'true'
           token: ${{ github.token }}
@@ -126,7 +126,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: "${{ env.BENCHMARK_RESULTS_BRANCH_NAME }}"
           token: ${{ github.token }}
@@ -174,13 +174,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'true'
           token: ${{ github.token }}
 
       - name: Checkout Agent Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: "scalyr/scalyr-agent-2"
           path: "scalyr-agent-2"
@@ -294,7 +294,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'true'
           token: ${{ github.token }}
@@ -302,13 +302,13 @@ jobs:
       # Needed so we can build telemetrygen locally - sadly it's currently not available for arm so
       # we need to use this workaround
       - name: Checkout OTel Contrib Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: "open-telemetry/opentelemetry-collector-contrib"
           path: "opentelemetry-collector-contrib"
 
       - name: Checkout Agent Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: "scalyr/scalyr-agent-2"
           path: "scalyr-agent-2"
