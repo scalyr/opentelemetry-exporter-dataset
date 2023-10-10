@@ -77,6 +77,8 @@ jobs:
             scripts/e2e/benchmark.log
             scripts/e2e/collector-logs.log
             scripts/e2e/stats-col-*.json
+            scripts/e2e/log.log
+            scripts/e2e/log.log.used*
 
       - name: Convert Result to Markdown Table
         uses: buildingcash/json-to-markdown-table-action@3212cd4ed03822b88cc1f1f96353100a3ef98474 # v1.0.0
