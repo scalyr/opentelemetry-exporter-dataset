@@ -82,9 +82,14 @@ if [ "x${DATASET_URL}" == "x" ]; then
   export DATASET_URL="http://dataset-dummy-server-e2e:8000";
   export DATASET_API_KEY="dummy";
 fi;
-log "DATASET_URL: ${DATASET_URL}";
-log "DATASET_API_KEY: XXXXX${DATASET_API_KEY: -4}";
-log "TEST_RUN_SERVERHOST: ${TEST_RUN_SERVERHOST}"
+log "DATASET_URL: '${DATASET_URL}'";
+log "DATASET_API_KEY: '${DATASET_API_KEY: -4}' (last 4 characters)";
+log "TEST_RUN_SERVERHOST: '${TEST_RUN_SERVERHOST}'"
+
+if [ "x${DATASET_API_KEY}" == "x" ]; then
+  log "Environmental variable DATASET_API_KEY is not set!";
+  exit 1;
+fi;
 
 # stop previous runs
 docker compose -f docker-compose.yaml down
