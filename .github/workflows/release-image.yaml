@@ -43,7 +43,7 @@ jobs:
           token: ${{ github.token }}
 
       - name: Log in to the Container registry - GitHub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -62,7 +62,7 @@ jobs:
 
       - name: Log in to the Container registry - DockerHub
         if: ${{ steps.secrets-check.outputs.available == 'true' }}
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME_PROD_ACCOUNT }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD_PROD_ACCOUNT }}
