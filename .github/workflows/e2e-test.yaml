@@ -39,7 +39,7 @@ jobs:
       # Known issue with occasional flaky test so we retry on failure to partially avoid flaky
       # test issue until root cause is found and resolved.
       - name: Run Test
-        uses: nick-fields/retry@943e742917ac94714d2f408a0e8320f2d1fcafcd # v2.8.3
+        uses: nick-fields/retry@7152eba30c6575329ac0576536151aca5a72780e # v3.0.0
         with:
           shell: bash
           timeout_seconds: 300
