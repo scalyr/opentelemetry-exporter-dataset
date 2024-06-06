@@ -14,9 +14,32 @@
  * limitations under the License.
  */
 
-package version
+package meter_config
 
-const (
-	Version      = "0.18.0"
-	ReleasedDate = "2024-02-15"
-)
+import "go.opentelemetry.io/otel/metric"
+
+type MeterConfig struct {
+	entity string
+	name   string
+	meter  *metric.Meter
+}
+
+func NewMeterConfig(meter *metric.Meter, entity string, name string) *MeterConfig {
+	return &MeterConfig{
+		entity: entity,
+		name:   name,
+		meter:  meter,
+	}
+}
+
+func (c *MeterConfig) Entity() string {
+	return c.entity
+}
+
+func (c *MeterConfig) Name() string {
+	return c.name
+}
+
+func (c *MeterConfig) Meter() *metric.Meter {
+	return c.meter
+}

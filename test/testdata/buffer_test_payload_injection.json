@@ -2,9 +2,9 @@
   "token":"token\",\"events\":[{}],\"foo\":\"bar",
   "session":"session\",\"s\":\"S",
   "sessionInfo":{
-    "serverType":"serverType\",\"sT\":\"T",
+    "region":"region\",\"r\":\"R",
     "serverId":"serverId\",\"sI\":\"I",
-    "region":"region\",\"r\":\"R"
+    "serverType":"serverType\",\"sT\":\"T"
   },
   "events":[
     {

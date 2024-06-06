@@ -25,6 +25,7 @@ import (
 func TestConfigWithOptions(t *testing.T) {
 	bufCfg, errB := New(
 		WithMaxLifetime(3*time.Second),
+		WithPurgeOlderThan(20*time.Second),
 		WithMaxSize(12345),
 		WithGroupBy([]string{"aaa", "bbb"}),
 		WithRetryInitialInterval(8*time.Second),
@@ -37,6 +38,7 @@ func TestConfigWithOptions(t *testing.T) {
 
 	assert.Equal(t, DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
+		PurgeOlderThan:       20 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
@@ -49,6 +51,7 @@ func TestConfigWithOptions(t *testing.T) {
 func TestDataConfigUpdate(t *testing.T) {
 	bufCfg, errB := New(
 		WithMaxLifetime(3*time.Second),
+		WithPurgeOlderThan(20*time.Second),
 		WithMaxSize(12345),
 		WithGroupBy([]string{"aaa", "bbb"}),
 		WithRetryInitialInterval(8*time.Second),
@@ -60,6 +63,7 @@ func TestDataConfigUpdate(t *testing.T) {
 
 	assert.Equal(t, DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
+		PurgeOlderThan:       20 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
@@ -70,6 +74,7 @@ func TestDataConfigUpdate(t *testing.T) {
 
 	bufCfg2, err := bufCfg.WithOptions(
 		WithMaxLifetime(23*time.Second),
+		WithPurgeOlderThan(220*time.Second),
 		WithMaxSize(212345),
 		WithGroupBy([]string{"2aaa", "2bbb"}),
 		WithRetryInitialInterval(28*time.Second),
@@ -82,6 +87,7 @@ func TestDataConfigUpdate(t *testing.T) {
 	// original config is unchanged
 	assert.Equal(t, DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
+		PurgeOlderThan:       20 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
@@ -93,6 +99,7 @@ func TestDataConfigUpdate(t *testing.T) {
 	// new config is changed
 	assert.Equal(t, DataSetBufferSettings{
 		MaxLifetime:          23 * time.Second,
+		PurgeOlderThan:       220 * time.Second,
 		MaxSize:              212345,
 		GroupBy:              []string{"2aaa", "2bbb"},
 		RetryInitialInterval: 28 * time.Second,
@@ -104,7 +111,7 @@ func TestDataConfigUpdate(t *testing.T) {
 
 func TestDataConfigNewDefaultToString(t *testing.T) {
 	cfg := NewDefaultDataSetBufferSettings()
-	assert.Equal(t, "MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s, RetryShutdownTimeout: 30s", cfg.String())
+	assert.Equal(t, "MaxLifetime: 5s, PurgeOlderThan: 30s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s, RetryShutdownTimeout: 30s", cfg.String())
 }
 
 func TestDataConfigNewDefaultIsValid(t *testing.T) {
