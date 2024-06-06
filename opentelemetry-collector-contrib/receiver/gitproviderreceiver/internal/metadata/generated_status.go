@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("gitprovider")
+)
+
 const (
-	Type             = "gitprovider"
 	MetricsStability = component.StabilityLevelDevelopment
 )

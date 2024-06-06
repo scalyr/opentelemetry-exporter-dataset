@@ -27,12 +27,16 @@ import (
 )
 
 const (
-	AttrBundleKey      = "bundle_key"
+	AttrSessionKey     = "session_key"
 	AttrServerHost     = "serverHost"
 	AttrOrigServerHost = "__origServerHost"
+	AttrLogFile        = "logfile"
 )
 
-type EventAttrs = map[string]interface{}
+type (
+	EventAttrs  = map[string]interface{}
+	SessionInfo = map[string]interface{}
+)
 
 // Event represents DataSet REST API event structure (see https://app.scalyr.com/help/api#addEvents)
 type Event struct {
@@ -66,12 +70,6 @@ type Thread struct {
 type Log struct {
 	Id    string                 `json:"id,omitempty"`
 	Attrs map[string]interface{} `json:"attrs"`
-}
-
-type SessionInfo struct {
-	ServerType string `json:"serverType,omitempty"`
-	ServerId   string `json:"serverId,omitempty"`
-	Region     string `json:"region,omitempty"`
 }
 
 // AddEventsRequestParams represents a represents a AddEvent DataSet REST API request parameters, see https://app.scalyr.com/help/api#addEvents.

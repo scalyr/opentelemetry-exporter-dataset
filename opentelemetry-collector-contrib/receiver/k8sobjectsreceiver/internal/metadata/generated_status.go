@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("k8sobjects")
+)
+
 const (
-	Type          = "k8sobjects"
-	LogsStability = component.StabilityLevelAlpha
+	LogsStability = component.StabilityLevelBeta
 )

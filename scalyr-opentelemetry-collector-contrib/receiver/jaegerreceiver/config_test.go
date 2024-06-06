@@ -6,7 +6,6 @@ package jaegerreceiver
 import (
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,13 +33,13 @@ func TestLoadConfig(t *testing.T) {
 			id: component.NewIDWithName(metadata.Type, "customname"),
 			expected: &Config{
 				Protocols: Protocols{
-					GRPC: &configgrpc.GRPCServerSettings{
+					GRPC: &configgrpc.ServerConfig{
 						NetAddr: confignet.NetAddr{
 							Endpoint:  "localhost:9876",
 							Transport: "tcp",
 						},
 					},
-					ThriftHTTP: &confighttp.HTTPServerSettings{
+					ThriftHTTP: &confighttp.ServerConfig{
 						Endpoint: ":3456",
 					},
 					ThriftCompact: &ProtocolUDP{
@@ -62,36 +61,28 @@ func TestLoadConfig(t *testing.T) {
 						},
 					},
 				},
-				RemoteSampling: &RemoteSamplingConfig{
-					HostEndpoint: "0.0.0.0:5778",
-					GRPCClientSettings: configgrpc.GRPCClientSettings{
-						Endpoint: "jaeger-collector:1234",
-					},
-					StrategyFile:               "/etc/strategies.json",
-					StrategyFileReloadInterval: time.Second * 10,
-				},
 			},
 		},
 		{
 			id: component.NewIDWithName(metadata.Type, "defaults"),
 			expected: &Config{
 				Protocols: Protocols{
-					GRPC: &configgrpc.GRPCServerSettings{
+					GRPC: &configgrpc.ServerConfig{
 						NetAddr: confignet.NetAddr{
-							Endpoint:  defaultGRPCBindEndpoint,
+							Endpoint:  "0.0.0.0:14250",
 							Transport: "tcp",
 						},
 					},
-					ThriftHTTP: &confighttp.HTTPServerSettings{
-						Endpoint: defaultHTTPBindEndpoint,
+					ThriftHTTP: &confighttp.ServerConfig{
+						Endpoint: "0.0.0.0:14268",
 					},
 					ThriftCompact: &ProtocolUDP{
-						Endpoint:        defaultThriftCompactBindEndpoint,
-						ServerConfigUDP: DefaultServerConfigUDP(),
+						Endpoint:        "0.0.0.0:6831",
+						ServerConfigUDP: defaultServerConfigUDP(),
 					},
 					ThriftBinary: &ProtocolUDP{
-						Endpoint:        defaultThriftBinaryBindEndpoint,
-						ServerConfigUDP: DefaultServerConfigUDP(),
+						Endpoint:        "0.0.0.0:6832",
+						ServerConfigUDP: defaultServerConfigUDP(),
 					},
 				},
 			},
@@ -100,15 +91,15 @@ func TestLoadConfig(t *testing.T) {
 			id: component.NewIDWithName(metadata.Type, "mixed"),
 			expected: &Config{
 				Protocols: Protocols{
-					GRPC: &configgrpc.GRPCServerSettings{
+					GRPC: &configgrpc.ServerConfig{
 						NetAddr: confignet.NetAddr{
 							Endpoint:  "localhost:9876",
 							Transport: "tcp",
 						},
 					},
 					ThriftCompact: &ProtocolUDP{
-						Endpoint:        defaultThriftCompactBindEndpoint,
-						ServerConfigUDP: DefaultServerConfigUDP(),
+						Endpoint:        "0.0.0.0:6831",
+						ServerConfigUDP: defaultServerConfigUDP(),
 					},
 				},
 			},
@@ -117,7 +108,7 @@ func TestLoadConfig(t *testing.T) {
 			id: component.NewIDWithName(metadata.Type, "tls"),
 			expected: &Config{
 				Protocols: Protocols{
-					GRPC: &configgrpc.GRPCServerSettings{
+					GRPC: &configgrpc.ServerConfig{
 						NetAddr: confignet.NetAddr{
 							Endpoint:  "localhost:9876",
 							Transport: "tcp",
@@ -129,7 +120,7 @@ func TestLoadConfig(t *testing.T) {
 							},
 						},
 					},
-					ThriftHTTP: &confighttp.HTTPServerSettings{
+					ThriftHTTP: &confighttp.ServerConfig{
 						Endpoint: ":3456",
 					},
 				},
@@ -183,7 +174,7 @@ func TestInvalidConfig(t *testing.T) {
 		{
 			desc: "thrift-http-no-port",
 			apply: func(cfg *Config) {
-				cfg.ThriftHTTP = &confighttp.HTTPServerSettings{
+				cfg.ThriftHTTP = &confighttp.ServerConfig{
 					Endpoint: "localhost:",
 				}
 			},
@@ -208,18 +199,9 @@ func TestInvalidConfig(t *testing.T) {
 			err: "receiver creation with no port number for Thrift UDP - Binary must fail",
 		},
 		{
-			desc: "remote-sampling-http-no-port",
-			apply: func(cfg *Config) {
-				cfg.RemoteSampling = &RemoteSamplingConfig{
-					HostEndpoint: "localhost:",
-				}
-			},
-			err: "receiver creation with no port number for the remote sampling HTTP endpoint must fail",
-		},
-		{
 			desc: "grpc-invalid-host",
 			apply: func(cfg *Config) {
-				cfg.GRPC = &configgrpc.GRPCServerSettings{
+				cfg.GRPC = &configgrpc.ServerConfig{
 					NetAddr: confignet.NetAddr{
 						Endpoint:  "1234",
 						Transport: "tcp",
@@ -243,37 +225,6 @@ func TestInvalidConfig(t *testing.T) {
 				}
 			},
 			err: "receiver creation with too large port number must fail",
-		},
-		{
-			desc: "port-outside-of-range",
-			apply: func(cfg *Config) {
-				cfg.Protocols = Protocols{}
-				cfg.ThriftCompact = &ProtocolUDP{
-					Endpoint: defaultThriftCompactBindEndpoint,
-				}
-				cfg.RemoteSampling = &RemoteSamplingConfig{
-					HostEndpoint: "localhost:5778",
-					StrategyFile: "strategies.json",
-				}
-			},
-			err: "receiver creation without gRPC and with remote sampling config",
-		},
-		{
-			desc: "reload-interval-outside-of-range",
-			apply: func(cfg *Config) {
-				cfg.Protocols.GRPC = &configgrpc.GRPCServerSettings{
-					NetAddr: confignet.NetAddr{
-						Endpoint:  "1234",
-						Transport: "tcp",
-					},
-				}
-				cfg.RemoteSampling = &RemoteSamplingConfig{
-					HostEndpoint:               "localhost:5778",
-					StrategyFile:               "strategies.json",
-					StrategyFileReloadInterval: -time.Second,
-				}
-			},
-			err: "strategy file reload interval should be great zero",
 		},
 	}
 	for _, tC := range testCases {

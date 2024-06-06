@@ -24,7 +24,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   # TODO: Add some check and fail if this version doesn't match in ./Dockerfile and otelcol-builder.yaml
-  OTEL_VERSION: v0.80.0
+  OTEL_VERSION: v0.101.0
 
 jobs:
   build-and-push-image:
@@ -137,10 +137,16 @@ jobs:
         run: |
           # Needs to match version defined in otelcol-builder.datasetexporter-latest.yaml
           expected_version=$(cat otelcol-builder.datasetexporter-latest.yaml |grep "version:" | head -1 | awk '{print $2}')
+          echo "Expected version: ${expected_version}"
 
+          echo "Check for components"
           docker run scalyr/opentelemetry-collector-contrib:${{ github.sha }} "components"
+
+          echo "Check for expected version: ${expected_version}"
           docker run scalyr/opentelemetry-collector-contrib:${{ github.sha }} "components" | grep "version: ${expected_version}"
-          docker run scalyr/opentelemetry-collector-contrib:${{ github.sha }} "components" | grep "\- dataset"
+
+          echo "Check for dataset"
+          docker run scalyr/opentelemetry-collector-contrib:${{ github.sha }} "components" | grep "name: dataset"
 
       - name: Push Dev Image To Docker Hub Account
         if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}

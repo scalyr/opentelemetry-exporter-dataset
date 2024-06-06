@@ -45,7 +45,7 @@ func newLogProcessor(settings component.TelemetrySettings, config component.Conf
 
 	meter := settings.MeterProvider.Meter(scopeName + nameSep + "logs")
 	nonRoutedLogRecordsCounter, err := meter.Int64Counter(
-		metadata.Type+metricSep+processorKey+metricSep+nonRoutedLogRecordsKey,
+		metadata.Type.String()+metricSep+processorKey+metricSep+nonRoutedLogRecordsKey,
 		metric.WithDescription("Number of log records that were not routed to some or all exporters"),
 	)
 	if err != nil {
@@ -105,8 +105,8 @@ func (p *logProcessor) route(ctx context.Context, l plog.Logs) error {
 	for i := 0; i < l.ResourceLogs().Len(); i++ {
 		rlogs := l.ResourceLogs().At(i)
 		ltx := ottllog.NewTransformContext(
-			plog.LogRecord{},
-			pcommon.InstrumentationScope{},
+			plog.NewLogRecord(),
+			pcommon.NewInstrumentationScope(),
 			rlogs.Resource(),
 		)
 

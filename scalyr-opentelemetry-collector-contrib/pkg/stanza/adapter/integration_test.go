@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumertest"
-	"go.opentelemetry.io/collector/obsreport"
+	"go.opentelemetry.io/collector/receiver/receiverhelper"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 	"go.uber.org/zap"
 
@@ -36,8 +36,8 @@ func createNoopReceiver(nextConsumer consumer.Logs) (*receiver, error) {
 		return nil, err
 	}
 
-	receiverID := component.NewID("test")
-	obsrecv, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+	receiverID := component.MustNewID("test")
+	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
 		ReceiverID:             receiverID,
 		ReceiverCreateSettings: receivertest.NewNopCreateSettings(),
 	})
@@ -46,7 +46,7 @@ func createNoopReceiver(nextConsumer consumer.Logs) (*receiver, error) {
 	}
 
 	return &receiver{
-		id:        component.NewID("testReceiver"),
+		id:        component.MustNewID("testReceiver"),
 		pipe:      pipe,
 		emitter:   emitter,
 		consumer:  nextConsumer,
@@ -110,6 +110,7 @@ func TestEmitterToConsumer(t *testing.T) {
 
 	err = logsReceiver.Start(context.Background(), componenttest.NewNopHost())
 	require.NoError(t, err)
+	defer func() { require.NoError(t, logsReceiver.Shutdown(context.Background())) }()
 
 	go func() {
 		ctx := context.Background()

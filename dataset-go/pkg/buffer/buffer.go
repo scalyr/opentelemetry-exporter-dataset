@@ -47,10 +47,11 @@ const (
 	AddingBundles
 	Publishing
 	Retrying
+	Purging
 )
 
 func (s Status) String() string {
-	return [...]string{"Initialising", "Ready", "AddingBundles", "Publishing", "Retrying"}[s]
+	return [...]string{"Initialising", "Ready", "AddingBundles", "Publishing", "Retrying", "Purging"}[s]
 }
 
 func (s Status) IsActive() bool {
@@ -364,6 +365,10 @@ func (buffer *Buffer) ShouldSendSize() bool {
 
 func (buffer *Buffer) ShouldSendAge(lifetime time.Duration) bool {
 	return buffer.countEvents.Load() > 0 && time.Since(time.Unix(0, buffer.createdAt.Load())) > lifetime
+}
+
+func (buffer *Buffer) ShouldPurgeAge(lifetime time.Duration) bool {
+	return buffer.countEvents.Load() == 0 && time.Since(time.Unix(0, buffer.createdAt.Load())) > lifetime
 }
 
 func (buffer *Buffer) BufferLengths() int32 {

@@ -45,8 +45,10 @@ func TestLoadConfig(t *testing.T) {
 					ReboundTriggerThresholdMiB: 16,
 					ReboundNeededThresholdMiB:  128,
 					CheckInterval:              time.Second * 5,
+					CleanupOnStart:             true,
 				},
 				Timeout: 2 * time.Second,
+				FSync:   true,
 			},
 		},
 	}

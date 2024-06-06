@@ -1,10 +1,11 @@
 type: postgresql
+scope_name: otelcol/postgresqlreceiver
 
 status:
   class: receiver
   stability:
     beta: [metrics]
-  distributions: [contrib, splunk, observiq, sumo]
+  distributions: [contrib]
   codeowners:
     active: [djaglowski]
 
@@ -13,8 +14,12 @@ resource_attributes:
     description: The name of the database.
     enabled: true
     type: string
+  postgresql.schema.name:
+    description: The schema name.
+    enabled: true
+    type: string
   postgresql.table.name:
-    description: The schema name followed by the table name.
+    description: The table name.
     enabled: true
     type: string
   postgresql.index.name:
@@ -46,6 +51,12 @@ attributes:
       - sync
       - write
     name_override: type
+  lock_type:
+    description: Type of the lockable object.
+    type: string
+  mode:
+    description: Name of the lock mode held or desired by the process.
+    type: string
   source:
     description: The block read source type.
     type: string
@@ -62,6 +73,9 @@ attributes:
     description: The database operation.
     type: string
     enum: [ins, upd, del, hot_upd]
+  relation:
+    description: OID of the relation targeted by the lock, or null if the target is not a relation or part of a relation.
+    type: string
   replication_client:
     description: The IP address of the client connected to this backend. If this field is "unix", it indicates either that the client is connected via a Unix socket.
     type: string
@@ -147,6 +161,13 @@ metrics:
       monotonic: false
       value_type: int
     unit: "{databases}"
+  postgresql.database.locks:
+    enabled: false
+    description: The number of database locks.
+    unit: "{lock}"
+    gauge:
+      value_type: int
+    attributes: [relation, mode, lock_type]
   postgresql.db_size:
     enabled: true
     description: The database disk usage.
@@ -224,6 +245,14 @@ metrics:
       value_type: int
       monotonic: true
       aggregation_temporality: cumulative
+  postgresql.sequential_scans:
+    enabled: false
+    description: The number of sequential scans.
+    unit: "{sequential_scan}"
+    sum:
+      value_type: int
+      monotonic: true
+      aggregation_temporality: cumulative
   postgresql.table.count:
     description: Number of user tables in a database.
     enabled: true
@@ -273,3 +302,15 @@ metrics:
       value_type: int
     extended_documentation: |
       This metric requires WAL to be enabled with at least one replica.
+  postgresql.wal.delay:
+    attributes: [wal_operation_lag, replication_client]
+    description: Time between flushing recent WAL locally and receiving notification that the standby server has completed an operation with it.
+    enabled: false
+    unit: s
+    gauge:
+      value_type: double
+    extended_documentation: |
+      This metric requires WAL to be enabled with at least one replica.
+  
+tests:
+  config:

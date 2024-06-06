@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("nsxt")
+)
+
 const (
-	Type             = "nsxt"
 	MetricsStability = component.StabilityLevelAlpha
 )

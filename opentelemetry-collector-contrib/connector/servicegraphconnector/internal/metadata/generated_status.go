@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("servicegraph")
+)
+
 const (
-	Type                     = "servicegraph"
 	TracesToMetricsStability = component.StabilityLevelAlpha
 )

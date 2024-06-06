@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("loki")
+)
+
 const (
-	Type          = "loki"
 	LogsStability = component.StabilityLevelAlpha
 )

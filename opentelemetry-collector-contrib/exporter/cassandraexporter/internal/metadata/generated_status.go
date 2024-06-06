@@ -6,8 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("cassandra")
+)
+
 const (
-	Type            = "cassandra"
 	TracesStability = component.StabilityLevelAlpha
 	LogsStability   = component.StabilityLevelAlpha
 )

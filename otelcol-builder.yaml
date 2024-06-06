@@ -5,39 +5,38 @@ dist:
   name: otelcol-dataset
   description: OpenTelemetry Collector Contrib Binary which contains latest version of the datasetexporter plugin
   output_path: ./otelcol-dataset
-  version: 0.83.0-datasetexporter-dev
-  otelcol_version: 0.83.0
+  version: 0.101.0-datasetexporter-dev
+  otelcol_version: 0.101.0
 
 exporters:
-  - gomod: go.opentelemetry.io/collector/exporter/loggingexporter v0.83.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.83.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter v0.83.0
-  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.83.0
-  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.83.0
+  - gomod: go.opentelemetry.io/collector/exporter/loggingexporter v0.101.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.101.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter v0.101.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.101.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.101.0
 
 receivers:
-  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.83.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver v0.83.0
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.101.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver v0.101.0
 
 processors:
-  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.83.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.83.0
-  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.83.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor v0.83.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor v0.83.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.83.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.101.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.101.0
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.101.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor v0.101.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.101.0
 
 extensions:
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.83.0
-  - gomod: go.opentelemetry.io/collector/extension/ballastextension v0.83.0
-  - gomod: go.opentelemetry.io/collector/extension/zpagesextension v0.83.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage v0.83.0
-    import: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.101.0
+  - gomod: go.opentelemetry.io/collector/extension/ballastextension v0.101.0
+  - gomod: go.opentelemetry.io/collector/extension/zpagesextension v0.101.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage v0.101.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/dbstorage v0.101.0
 
 connectors:
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/connector/spanmetricsconnector v0.83.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/connector/spanmetricsconnector v0.101.0
 
 replaces:
-  - github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.83.0 => ./../scalyr-opentelemetry-collector-contrib/exporter/datasetexporter
+  - github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.101.0 => ./../scalyr-opentelemetry-collector-contrib/exporter/datasetexporter
   - github.com/scalyr/dataset-go v0.14.0 => ./../dataset-go
-#  github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.83.0 => github.com/scalyr/opentelemetry-collector-contrib/exporter/datasetexporter datasetexporter-latest
+#  github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.101.0 => github.com/scalyr/opentelemetry-collector-contrib/exporter/datasetexporter datasetexporter-latest

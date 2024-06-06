@@ -6,4 +6,4 @@ replace (
 	github.com/scalyr/dataset-go => ./dataset-go
 )
 
-go 1.19
+go 1.21

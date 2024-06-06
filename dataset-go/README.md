@@ -29,14 +29,15 @@ cfg, err := config.New(config.FromEnv())
 if err != nil { panic(err) }
 
 // build client
-cl, err := client.NewClient(cfg, &http.Client{}, logger)
+cl, err := client.NewClient(cfg, &http.Client{}, logger, nil, nil)
 if err != nil { panic(err) }
-
-// send all buffers when we want to finish
-defer cl.SendAllAddEventsBuffers()
 
 // send bundles
 err = cl.AddEvents(makeBundles())
+if err != nil { panic(err) }
+
+// Finish event processing
+err = cl.Shutdown()
 if err != nil { panic(err) }
 ```
 
