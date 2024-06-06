@@ -17,7 +17,7 @@ generate = "generate:main"
 mypy = "^1.8.0"
 black = "^24.4.2"
 flake8 = "^6.1.0"
-isort = "^5.12.0"
+isort = "^5.13.2"
 
 [build-system]
 requires = ["poetry-core"]
