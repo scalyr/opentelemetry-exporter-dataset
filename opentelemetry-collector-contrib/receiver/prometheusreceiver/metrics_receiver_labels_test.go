@@ -6,7 +6,6 @@ package prometheusreceiver
 import (
 	"testing"
 
-	promcfg "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/stretchr/testify/require"
@@ -29,7 +28,7 @@ func TestExternalLabels(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "", func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		cfg.GlobalConfig.ExternalLabels = labels.FromStrings("key", "value")
 	})
 }
@@ -121,7 +120,7 @@ func TestLabelLimitConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "", func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		// set label limit in scrape_config
 		for _, scrapeCfg := range cfg.ScrapeConfigs {
 			scrapeCfg.LabelLimit = 5
@@ -198,7 +197,7 @@ func verifyLabelConfigTarget1(t *testing.T, td *testData, rms []pmetric.Resource
 					histogramPointComparator: []histogramPointComparator{
 						compareHistogramStartTimestamp(ts1),
 						compareHistogramTimestamp(ts1),
-						compareHistogram(2500, 5000, []uint64{1000, 500, 500, 500}),
+						compareHistogram(2500, 5000, []float64{0.1, 0.5, 1}, []uint64{1000, 500, 500, 500}),
 						compareHistogramAttributes(map[string]string{"label1": "value1", "label2": "value2"}),
 					},
 				},
@@ -248,7 +247,7 @@ func TestLabelNameLimitConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "", func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		// set label limit in scrape_config
 		for _, scrapeCfg := range cfg.ScrapeConfigs {
 			scrapeCfg.LabelNameLengthLimit = 20
@@ -284,7 +283,7 @@ func TestLabelValueLimitConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "", func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		// set label name limit in scrape_config
 		for _, scrapeCfg := range cfg.ScrapeConfigs {
 			scrapeCfg.LabelValueLengthLimit = 25
@@ -360,7 +359,7 @@ func verifyEmptyLabelValuesTarget1(t *testing.T, td *testData, rms []pmetric.Res
 					histogramPointComparator: []histogramPointComparator{
 						compareHistogramStartTimestamp(ts1),
 						compareHistogramTimestamp(ts1),
-						compareHistogram(2500, 5000, []uint64{1000, 500, 500, 500}),
+						compareHistogram(2500, 5000, []float64{0.1, 0.5, 1}, []uint64{1000, 500, 500, 500}),
 						compareHistogramAttributes(map[string]string{"id": "1"}),
 					},
 				},
@@ -462,7 +461,7 @@ func TestEmptyLabelValues(t *testing.T) {
 			validateFunc: verifyEmptyLabelValuesTarget2,
 		},
 	}
-	testComponent(t, targets, false, false, "")
+	testComponent(t, targets, nil)
 }
 
 const honorLabelsTarget = `
@@ -556,7 +555,7 @@ func TestEmptyLabels(t *testing.T) {
 			validateFunc: verifyEmptyLabelsTarget1,
 		},
 	}
-	testComponent(t, targets, false, false, "")
+	testComponent(t, targets, nil)
 }
 
 func TestHonorLabelsFalseConfig(t *testing.T) {
@@ -570,7 +569,7 @@ func TestHonorLabelsFalseConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "")
+	testComponent(t, targets, nil)
 }
 
 func verifyHonorLabelsTrue(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
@@ -613,7 +612,7 @@ func TestHonorLabelsTrueConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "", func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		// set label name limit in scrape_config
 		for _, scrapeCfg := range cfg.ScrapeConfigs {
 			scrapeCfg.HonorLabels = true
@@ -639,7 +638,7 @@ func TestRelabelJobInstance(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "", func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		for _, scrapeConfig := range cfg.ScrapeConfigs {
 			scrapeConfig.MetricRelabelConfigs = []*relabel.Config{
 				{
@@ -709,7 +708,7 @@ func TestTargetInfoResourceAttributes(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "")
+	testComponent(t, targets, nil)
 }
 
 func verifyTargetInfoResourceAttributes(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
@@ -759,7 +758,7 @@ func TestScopeInfoScopeAttributes(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, false, false, "")
+	testComponent(t, targets, nil)
 }
 
 func verifyMultipleScopes(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
@@ -767,16 +766,19 @@ func verifyMultipleScopes(t *testing.T, td *testData, rms []pmetric.ResourceMetr
 	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
 
 	sms := rms[0].ScopeMetrics()
-	require.Equal(t, sms.Len(), 3, "At two scope metrics should be present")
+	require.Equal(t, sms.Len(), 3, "Three scope metrics should be present")
+	sms.Sort(func(a, b pmetric.ScopeMetrics) bool {
+		return a.Scope().Name() < b.Scope().Name()
+	})
 	require.Equal(t, sms.At(0).Scope().Name(), "fake.scope.name")
 	require.Equal(t, sms.At(0).Scope().Version(), "v0.1.0")
 	require.Equal(t, sms.At(0).Scope().Attributes().Len(), 0)
-	require.Equal(t, sms.At(1).Scope().Name(), "scope.with.attributes")
-	require.Equal(t, sms.At(1).Scope().Version(), "v1.5.0")
-	require.Equal(t, sms.At(1).Scope().Attributes().Len(), 1)
-	scopeAttrVal, found := sms.At(1).Scope().Attributes().Get("animal")
+	require.Equal(t, sms.At(1).Scope().Name(), "otelcol/prometheusreceiver")
+	require.Equal(t, sms.At(1).Scope().Attributes().Len(), 0)
+	require.Equal(t, sms.At(2).Scope().Name(), "scope.with.attributes")
+	require.Equal(t, sms.At(2).Scope().Version(), "v1.5.0")
+	require.Equal(t, sms.At(2).Scope().Attributes().Len(), 1)
+	scopeAttrVal, found := sms.At(2).Scope().Attributes().Get("animal")
 	require.True(t, found)
 	require.Equal(t, scopeAttrVal.Str(), "bear")
-	require.Equal(t, sms.At(2).Scope().Name(), "otelcol/prometheusreceiver")
-	require.Equal(t, sms.At(2).Scope().Attributes().Len(), 0)
 }

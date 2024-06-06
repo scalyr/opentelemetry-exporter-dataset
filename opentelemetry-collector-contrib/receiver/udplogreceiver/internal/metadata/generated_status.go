@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("udplog")
+)
+
 const (
-	Type          = "udplog"
 	LogsStability = component.StabilityLevelAlpha
 )

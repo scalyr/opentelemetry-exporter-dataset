@@ -1,0 +1,12 @@
+# https://golangci-lint.run/usage/configuration
+
+# Options for analysis running.
+run:
+  # Include test files or not.
+  # Default: true
+  tests: false
+
+  # Allow multiple parallel golangci-lint instances running.
+  # If false, golangci-lint acquires file lock on start.
+  # Default: false
+  allow-parallel-runners: true

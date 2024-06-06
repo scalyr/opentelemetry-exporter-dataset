@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("chrony")
+)
+
 const (
-	Type             = "chrony"
 	MetricsStability = component.StabilityLevelAlpha
 )

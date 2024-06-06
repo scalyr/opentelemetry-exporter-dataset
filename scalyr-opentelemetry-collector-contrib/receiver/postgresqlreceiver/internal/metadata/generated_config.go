@@ -15,7 +15,7 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(ms, confmap.WithErrorUnused())
+	err := parser.Unmarshal(ms)
 	if err != nil {
 		return err
 	}
@@ -35,6 +35,7 @@ type MetricsConfig struct {
 	PostgresqlCommits                  MetricConfig `mapstructure:"postgresql.commits"`
 	PostgresqlConnectionMax            MetricConfig `mapstructure:"postgresql.connection.max"`
 	PostgresqlDatabaseCount            MetricConfig `mapstructure:"postgresql.database.count"`
+	PostgresqlDatabaseLocks            MetricConfig `mapstructure:"postgresql.database.locks"`
 	PostgresqlDbSize                   MetricConfig `mapstructure:"postgresql.db_size"`
 	PostgresqlDeadlocks                MetricConfig `mapstructure:"postgresql.deadlocks"`
 	PostgresqlIndexScans               MetricConfig `mapstructure:"postgresql.index.scans"`
@@ -43,11 +44,13 @@ type MetricsConfig struct {
 	PostgresqlReplicationDataDelay     MetricConfig `mapstructure:"postgresql.replication.data_delay"`
 	PostgresqlRollbacks                MetricConfig `mapstructure:"postgresql.rollbacks"`
 	PostgresqlRows                     MetricConfig `mapstructure:"postgresql.rows"`
+	PostgresqlSequentialScans          MetricConfig `mapstructure:"postgresql.sequential_scans"`
 	PostgresqlTableCount               MetricConfig `mapstructure:"postgresql.table.count"`
 	PostgresqlTableSize                MetricConfig `mapstructure:"postgresql.table.size"`
 	PostgresqlTableVacuumCount         MetricConfig `mapstructure:"postgresql.table.vacuum.count"`
 	PostgresqlTempFiles                MetricConfig `mapstructure:"postgresql.temp_files"`
 	PostgresqlWalAge                   MetricConfig `mapstructure:"postgresql.wal.age"`
+	PostgresqlWalDelay                 MetricConfig `mapstructure:"postgresql.wal.delay"`
 	PostgresqlWalLag                   MetricConfig `mapstructure:"postgresql.wal.lag"`
 }
 
@@ -83,6 +86,9 @@ func DefaultMetricsConfig() MetricsConfig {
 		PostgresqlDatabaseCount: MetricConfig{
 			Enabled: true,
 		},
+		PostgresqlDatabaseLocks: MetricConfig{
+			Enabled: false,
+		},
 		PostgresqlDbSize: MetricConfig{
 			Enabled: true,
 		},
@@ -107,6 +113,9 @@ func DefaultMetricsConfig() MetricsConfig {
 		PostgresqlRows: MetricConfig{
 			Enabled: true,
 		},
+		PostgresqlSequentialScans: MetricConfig{
+			Enabled: false,
+		},
 		PostgresqlTableCount: MetricConfig{
 			Enabled: true,
 		},
@@ -122,6 +131,9 @@ func DefaultMetricsConfig() MetricsConfig {
 		PostgresqlWalAge: MetricConfig{
 			Enabled: true,
 		},
+		PostgresqlWalDelay: MetricConfig{
+			Enabled: false,
+		},
 		PostgresqlWalLag: MetricConfig{
 			Enabled: true,
 		},
@@ -131,12 +143,27 @@ func DefaultMetricsConfig() MetricsConfig {
 // ResourceAttributeConfig provides common config for a particular resource attribute.
 type ResourceAttributeConfig struct {
 	Enabled bool `mapstructure:"enabled"`
+
+	enabledSetByUser bool
+}
+
+func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
+	if parser == nil {
+		return nil
+	}
+	err := parser.Unmarshal(rac)
+	if err != nil {
+		return err
+	}
+	rac.enabledSetByUser = parser.IsSet("enabled")
+	return nil
 }
 
 // ResourceAttributesConfig provides config for postgresql resource attributes.
 type ResourceAttributesConfig struct {
 	PostgresqlDatabaseName ResourceAttributeConfig `mapstructure:"postgresql.database.name"`
 	PostgresqlIndexName    ResourceAttributeConfig `mapstructure:"postgresql.index.name"`
+	PostgresqlSchemaName   ResourceAttributeConfig `mapstructure:"postgresql.schema.name"`
 	PostgresqlTableName    ResourceAttributeConfig `mapstructure:"postgresql.table.name"`
 }
 
@@ -146,6 +173,9 @@ func DefaultResourceAttributesConfig() ResourceAttributesConfig {
 			Enabled: true,
 		},
 		PostgresqlIndexName: ResourceAttributeConfig{
+			Enabled: true,
+		},
+		PostgresqlSchemaName: ResourceAttributeConfig{
 			Enabled: true,
 		},
 		PostgresqlTableName: ResourceAttributeConfig{

@@ -18,7 +18,9 @@ Inputs:
 Parsers:
 - [csv_parser](./csv_parser.md)
 - [json_parser](./json_parser.md)
+- [json_array_parser](./json_array_parser.md)
 - [regex_parser](./regex_parser.md)
+- [scope_name_parser](./scope_name_parser.md)
 - [syslog_parser](./syslog_parser.md)
 - [severity_parser](./severity_parser.md)
 - [time_parser](./time_parser.md)
@@ -42,3 +44,4 @@ General purpose:
 - [retain](./retain.md)
 - [router](./router.md)
 - [unquote](./unquote.md)
+- [assign_keys](./assign_keys.md)

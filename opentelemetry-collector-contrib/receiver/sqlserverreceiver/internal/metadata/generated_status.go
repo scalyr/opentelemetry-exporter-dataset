@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("sqlserver")
+)
+
 const (
-	Type             = "sqlserver"
 	MetricsStability = component.StabilityLevelBeta
 )

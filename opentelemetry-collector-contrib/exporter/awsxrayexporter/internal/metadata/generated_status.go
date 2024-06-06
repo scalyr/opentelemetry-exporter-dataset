@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("awsxray")
+)
+
 const (
-	Type            = "awsxray"
 	TracesStability = component.StabilityLevelBeta
 )

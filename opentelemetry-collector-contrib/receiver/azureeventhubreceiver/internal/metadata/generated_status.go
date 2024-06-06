@@ -6,8 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("azureeventhub")
+)
+
 const (
-	Type             = "azureeventhub"
 	MetricsStability = component.StabilityLevelAlpha
 	LogsStability    = component.StabilityLevelAlpha
 )

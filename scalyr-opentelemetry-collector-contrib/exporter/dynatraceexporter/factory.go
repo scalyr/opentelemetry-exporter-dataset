@@ -8,7 +8,8 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
-	exp "go.opentelemetry.io/collector/exporter"
+	"go.opentelemetry.io/collector/config/configretry"
+	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	dtconfig "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/dynatraceexporter/config"
@@ -17,25 +18,25 @@ import (
 )
 
 // NewFactory creates a Dynatrace exporter factory
-func NewFactory() exp.Factory {
-	return exp.NewFactory(
+func NewFactory() exporter.Factory {
+	return exporter.NewFactory(
 		metadata.Type,
 		createDefaultConfig,
-		exp.WithMetrics(createMetricsExporter, metadata.MetricsStability),
+		exporter.WithMetrics(createMetricsExporter, metadata.MetricsStability),
 	)
 }
 
 // createDefaultConfig creates the default exporter configuration
 func createDefaultConfig() component.Config {
 	return &dtconfig.Config{
-		RetrySettings: exporterhelper.NewDefaultRetrySettings(),
+		BackOffConfig: configretry.NewDefaultBackOffConfig(),
 		QueueSettings: exporterhelper.NewDefaultQueueSettings(),
 		ResourceToTelemetrySettings: resourcetotelemetry.Settings{
 			Enabled: false,
 		},
 
-		APIToken:           "",
-		HTTPClientSettings: confighttp.HTTPClientSettings{Endpoint: ""},
+		APIToken:     "",
+		ClientConfig: confighttp.ClientConfig{Endpoint: ""},
 
 		Tags:              []string{},
 		DefaultDimensions: make(map[string]string),
@@ -45,9 +46,9 @@ func createDefaultConfig() component.Config {
 // createMetricsExporter creates a metrics exporter based on this
 func createMetricsExporter(
 	ctx context.Context,
-	set exp.CreateSettings,
+	set exporter.CreateSettings,
 	c component.Config,
-) (exp.Metrics, error) {
+) (exporter.Metrics, error) {
 
 	cfg := c.(*dtconfig.Config)
 
@@ -59,7 +60,7 @@ func createMetricsExporter(
 		cfg,
 		exp.PushMetricsData,
 		exporterhelper.WithQueue(cfg.QueueSettings),
-		exporterhelper.WithRetry(cfg.RetrySettings),
+		exporterhelper.WithRetry(cfg.BackOffConfig),
 		exporterhelper.WithStart(exp.start),
 	)
 	if err != nil {

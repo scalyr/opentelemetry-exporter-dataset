@@ -11,6 +11,36 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 )
 
+// AttributePercentile specifies the a value percentile attribute.
+type AttributePercentile int
+
+const (
+	_ AttributePercentile = iota
+	AttributePercentileP50
+	AttributePercentileP99
+	AttributePercentileP999
+)
+
+// String returns the string representation of the AttributePercentile.
+func (av AttributePercentile) String() string {
+	switch av {
+	case AttributePercentileP50:
+		return "p50"
+	case AttributePercentileP99:
+		return "p99"
+	case AttributePercentileP999:
+		return "p99.9"
+	}
+	return ""
+}
+
+// MapAttributePercentile is a helper map of string to AttributePercentile attribute value.
+var MapAttributePercentile = map[string]AttributePercentile{
+	"p50":   AttributePercentileP50,
+	"p99":   AttributePercentileP99,
+	"p99.9": AttributePercentileP999,
+}
+
 // AttributeRole specifies the a value role attribute.
 type AttributeRole int
 
@@ -325,6 +355,58 @@ func (m *metricRedisCmdCalls) emit(metrics pmetric.MetricSlice) {
 
 func newMetricRedisCmdCalls(cfg MetricConfig) metricRedisCmdCalls {
 	m := metricRedisCmdCalls{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
+type metricRedisCmdLatency struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills redis.cmd.latency metric with initial data.
+func (m *metricRedisCmdLatency) init() {
+	m.data.SetName("redis.cmd.latency")
+	m.data.SetDescription("Command execution latency")
+	m.data.SetUnit("s")
+	m.data.SetEmptyGauge()
+	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+func (m *metricRedisCmdLatency) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val float64, cmdAttributeValue string, percentileAttributeValue string) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Gauge().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetDoubleValue(val)
+	dp.Attributes().PutStr("cmd", cmdAttributeValue)
+	dp.Attributes().PutStr("percentile", percentileAttributeValue)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricRedisCmdLatency) updateCapacity() {
+	if m.data.Gauge().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Gauge().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricRedisCmdLatency) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricRedisCmdLatency(cfg MetricConfig) metricRedisCmdLatency {
+	m := metricRedisCmdLatency{config: cfg}
 	if cfg.Enabled {
 		m.data = pmetric.NewMetric()
 		m.init()
@@ -1591,6 +1673,55 @@ func newMetricRedisReplicationOffset(cfg MetricConfig) metricRedisReplicationOff
 	return m
 }
 
+type metricRedisReplicationReplicaOffset struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills redis.replication.replica_offset metric with initial data.
+func (m *metricRedisReplicationReplicaOffset) init() {
+	m.data.SetName("redis.replication.replica_offset")
+	m.data.SetDescription("Offset for redis replica")
+	m.data.SetUnit("By")
+	m.data.SetEmptyGauge()
+}
+
+func (m *metricRedisReplicationReplicaOffset) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Gauge().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetIntValue(val)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricRedisReplicationReplicaOffset) updateCapacity() {
+	if m.data.Gauge().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Gauge().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricRedisReplicationReplicaOffset) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricRedisReplicationReplicaOffset(cfg MetricConfig) metricRedisReplicationReplicaOffset {
+	m := metricRedisReplicationReplicaOffset{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
 type metricRedisRole struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	config   MetricConfig   // metric config provided by user.
@@ -1759,6 +1890,7 @@ type MetricsBuilder struct {
 	metricRedisClientsMaxInputBuffer             metricRedisClientsMaxInputBuffer
 	metricRedisClientsMaxOutputBuffer            metricRedisClientsMaxOutputBuffer
 	metricRedisCmdCalls                          metricRedisCmdCalls
+	metricRedisCmdLatency                        metricRedisCmdLatency
 	metricRedisCmdUsec                           metricRedisCmdUsec
 	metricRedisCommands                          metricRedisCommands
 	metricRedisCommandsProcessed                 metricRedisCommandsProcessed
@@ -1784,6 +1916,7 @@ type MetricsBuilder struct {
 	metricRedisRdbChangesSinceLastSave           metricRedisRdbChangesSinceLastSave
 	metricRedisReplicationBacklogFirstByteOffset metricRedisReplicationBacklogFirstByteOffset
 	metricRedisReplicationOffset                 metricRedisReplicationOffset
+	metricRedisReplicationReplicaOffset          metricRedisReplicationReplicaOffset
 	metricRedisRole                              metricRedisRole
 	metricRedisSlavesConnected                   metricRedisSlavesConnected
 	metricRedisUptime                            metricRedisUptime
@@ -1810,6 +1943,7 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricRedisClientsMaxInputBuffer:             newMetricRedisClientsMaxInputBuffer(mbc.Metrics.RedisClientsMaxInputBuffer),
 		metricRedisClientsMaxOutputBuffer:            newMetricRedisClientsMaxOutputBuffer(mbc.Metrics.RedisClientsMaxOutputBuffer),
 		metricRedisCmdCalls:                          newMetricRedisCmdCalls(mbc.Metrics.RedisCmdCalls),
+		metricRedisCmdLatency:                        newMetricRedisCmdLatency(mbc.Metrics.RedisCmdLatency),
 		metricRedisCmdUsec:                           newMetricRedisCmdUsec(mbc.Metrics.RedisCmdUsec),
 		metricRedisCommands:                          newMetricRedisCommands(mbc.Metrics.RedisCommands),
 		metricRedisCommandsProcessed:                 newMetricRedisCommandsProcessed(mbc.Metrics.RedisCommandsProcessed),
@@ -1835,6 +1969,7 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricRedisRdbChangesSinceLastSave:           newMetricRedisRdbChangesSinceLastSave(mbc.Metrics.RedisRdbChangesSinceLastSave),
 		metricRedisReplicationBacklogFirstByteOffset: newMetricRedisReplicationBacklogFirstByteOffset(mbc.Metrics.RedisReplicationBacklogFirstByteOffset),
 		metricRedisReplicationOffset:                 newMetricRedisReplicationOffset(mbc.Metrics.RedisReplicationOffset),
+		metricRedisReplicationReplicaOffset:          newMetricRedisReplicationReplicaOffset(mbc.Metrics.RedisReplicationReplicaOffset),
 		metricRedisRole:                              newMetricRedisRole(mbc.Metrics.RedisRole),
 		metricRedisSlavesConnected:                   newMetricRedisSlavesConnected(mbc.Metrics.RedisSlavesConnected),
 		metricRedisUptime:                            newMetricRedisUptime(mbc.Metrics.RedisUptime),
@@ -1904,6 +2039,7 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricRedisClientsMaxInputBuffer.emit(ils.Metrics())
 	mb.metricRedisClientsMaxOutputBuffer.emit(ils.Metrics())
 	mb.metricRedisCmdCalls.emit(ils.Metrics())
+	mb.metricRedisCmdLatency.emit(ils.Metrics())
 	mb.metricRedisCmdUsec.emit(ils.Metrics())
 	mb.metricRedisCommands.emit(ils.Metrics())
 	mb.metricRedisCommandsProcessed.emit(ils.Metrics())
@@ -1929,6 +2065,7 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricRedisRdbChangesSinceLastSave.emit(ils.Metrics())
 	mb.metricRedisReplicationBacklogFirstByteOffset.emit(ils.Metrics())
 	mb.metricRedisReplicationOffset.emit(ils.Metrics())
+	mb.metricRedisReplicationReplicaOffset.emit(ils.Metrics())
 	mb.metricRedisRole.emit(ils.Metrics())
 	mb.metricRedisSlavesConnected.emit(ils.Metrics())
 	mb.metricRedisUptime.emit(ils.Metrics())
@@ -1975,6 +2112,11 @@ func (mb *MetricsBuilder) RecordRedisClientsMaxOutputBufferDataPoint(ts pcommon.
 // RecordRedisCmdCallsDataPoint adds a data point to redis.cmd.calls metric.
 func (mb *MetricsBuilder) RecordRedisCmdCallsDataPoint(ts pcommon.Timestamp, val int64, cmdAttributeValue string) {
 	mb.metricRedisCmdCalls.recordDataPoint(mb.startTime, ts, val, cmdAttributeValue)
+}
+
+// RecordRedisCmdLatencyDataPoint adds a data point to redis.cmd.latency metric.
+func (mb *MetricsBuilder) RecordRedisCmdLatencyDataPoint(ts pcommon.Timestamp, val float64, cmdAttributeValue string, percentileAttributeValue AttributePercentile) {
+	mb.metricRedisCmdLatency.recordDataPoint(mb.startTime, ts, val, cmdAttributeValue, percentileAttributeValue.String())
 }
 
 // RecordRedisCmdUsecDataPoint adds a data point to redis.cmd.usec metric.
@@ -2100,6 +2242,11 @@ func (mb *MetricsBuilder) RecordRedisReplicationBacklogFirstByteOffsetDataPoint(
 // RecordRedisReplicationOffsetDataPoint adds a data point to redis.replication.offset metric.
 func (mb *MetricsBuilder) RecordRedisReplicationOffsetDataPoint(ts pcommon.Timestamp, val int64) {
 	mb.metricRedisReplicationOffset.recordDataPoint(mb.startTime, ts, val)
+}
+
+// RecordRedisReplicationReplicaOffsetDataPoint adds a data point to redis.replication.replica_offset metric.
+func (mb *MetricsBuilder) RecordRedisReplicationReplicaOffsetDataPoint(ts pcommon.Timestamp, val int64) {
+	mb.metricRedisReplicationReplicaOffset.recordDataPoint(mb.startTime, ts, val)
 }
 
 // RecordRedisRoleDataPoint adds a data point to redis.role metric.

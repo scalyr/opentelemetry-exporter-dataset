@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("bearertokenauth")
+)
+
 const (
-	Type               = "bearertokenauth"
 	ExtensionStability = component.StabilityLevelBeta
 )

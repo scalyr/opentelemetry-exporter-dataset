@@ -17,6 +17,8 @@
 package client
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,9 +38,99 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	errMsgUnableToSentRequest   = "unable to send request"
+	errMsgUnableToReadResponse  = "unable to read response"
+	errMsgUnableToParseResponse = "unable to parse response"
+)
+
 /*
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
+
+type EventWithMeta struct {
+	EventBundle *add_events.EventBundle
+	Key         string
+	SessionInfo add_events.SessionInfo
+}
+
+func NewEventWithMeta(
+	bundle *add_events.EventBundle,
+	groupBy []string,
+	serverHost string,
+	debug bool,
+) EventWithMeta {
+	// initialise
+	key := ""
+	info := make(add_events.SessionInfo)
+
+	// adjust server host attribute
+	adjustServerHost(bundle, serverHost)
+
+	// construct Key
+	bundleKey := extractKeyAndUpdateInfo(bundle, groupBy, key, info)
+
+	// in debug mode include bundleKey
+	if debug {
+		info[add_events.AttrSessionKey] = bundleKey
+	}
+
+	return EventWithMeta{
+		EventBundle: bundle,
+		Key:         bundleKey,
+		SessionInfo: info,
+	}
+}
+
+func extractKeyAndUpdateInfo(bundle *add_events.EventBundle, groupBy []string, key string, info add_events.SessionInfo) string {
+	// construct key and move attributes from attrs to sessionInfo
+	for _, k := range groupBy {
+		val, ok := bundle.Event.Attrs[k]
+		key += k + ":"
+		if ok {
+			key += fmt.Sprintf("%s", val)
+
+			// move to session info and remove from attributes
+			info[k] = val
+			delete(bundle.Event.Attrs, k)
+		}
+		key += "___DELIM___"
+	}
+
+	// use md5 to shorten the key
+	hash := md5.Sum([]byte(key))
+	return hex.EncodeToString(hash[:])
+}
+
+func adjustServerHost(bundle *add_events.EventBundle, serverHost string) {
+	// figure out serverHost value
+	usedServerHost := serverHost
+	// if event's ServerHost is set, use it
+	if len(bundle.Event.ServerHost) > 0 {
+		usedServerHost = bundle.Event.ServerHost
+	} else {
+		// if somebody is using library directly and forget to set Event.ServerHost,
+		// lets check the attributes first
+
+		// check serverHost attribute
+		attrHost, ok := bundle.Event.Attrs[add_events.AttrServerHost]
+		if ok {
+			usedServerHost = attrHost.(string)
+		} else {
+			// if serverHost attribute is not set, check the __origServerHost
+			attrOrigHost, okOrig := bundle.Event.Attrs[add_events.AttrOrigServerHost]
+			if okOrig {
+				usedServerHost = attrOrigHost.(string)
+			}
+		}
+	}
+
+	// for the SessionInfo, it has to be in the serverHost
+	// therefore remove the orig and set the serverHost
+	// so that it can be in the next step moved to sessionInfo
+	delete(bundle.Event.Attrs, add_events.AttrOrigServerHost)
+	bundle.Event.Attrs[add_events.AttrServerHost] = usedServerHost
+}
 
 // AddEvents enqueues given events for processing (sending to Dataset).
 // It returns an error if the batch was not accepted (e.g. exporter in error state and retrying handle previous batches or client is being shutdown).
@@ -53,10 +145,17 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 
 	// then, figure out which keys are part of the batch
 	// store there information about the host
-	seenKeys := make(map[string]bool)
+	bundlesWithMeta := make(map[string][]EventWithMeta)
 	for _, bundle := range bundles {
-		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		seenKeys[key] = true
+		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy, client.serverHost, client.Config.Debug)
+
+		session := fmt.Sprintf("%s-%s", client.Id, bWM.Key)
+		list, found := bundlesWithMeta[session]
+		if !found {
+			bundlesWithMeta[session] = []EventWithMeta{bWM}
+		} else {
+			bundlesWithMeta[session] = append(list, bWM)
+		}
 	}
 
 	// update time when the first batch was received
@@ -68,41 +167,27 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// add subscriber for events by key
 	// add subscriber for buffer by key
 	client.addEventsMutex.Lock()
-	defer client.addEventsMutex.Unlock()
-	for key := range seenKeys {
+	for key, list := range bundlesWithMeta {
 		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
 			// add information about the host to the sessionInfo
-			client.newBufferForEvents(key)
+			client.newBufferForEvents(key, &list[0].SessionInfo)
 
 			client.newEventBundleSubscriberRoutine(key)
 		}
 	}
+	client.addEventsMutex.Unlock()
 
 	// and as last step - publish them
-	for _, bundle := range bundles {
-		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		client.eventBundlePerKeyTopic.Pub(bundle, key)
-		client.eventsEnqueued.Add(1)
+
+	for key, list := range bundlesWithMeta {
+		for _, bundle := range list {
+			client.eventBundlePerKeyTopic.Pub(bundle, key)
+			client.statistics.EventsEnqueuedAdd(1)
+		}
 	}
 
 	return nil
-}
-
-// fixServerHostsInBundle fills the attribute __origServerHost for the event
-// and removes the attribute serverHost. This is needed to properly associate
-// incoming events with the correct host
-func (client *DataSetClient) fixServerHostsInBundle(bundle *add_events.EventBundle) {
-	delete(bundle.Event.Attrs, add_events.AttrServerHost)
-
-	// set the attribute __origServerHost to the event's ServerHost
-	if len(bundle.Event.ServerHost) > 0 {
-		bundle.Event.Attrs[add_events.AttrOrigServerHost] = bundle.Event.ServerHost
-		return
-	}
-
-	// as fallback use the value set to the client
-	bundle.Event.Attrs[add_events.AttrOrigServerHost] = client.serverHost
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
@@ -113,11 +198,10 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	})(key, ch)
 }
 
-func (client *DataSetClient) newBufferForEvents(key string) {
-	session := fmt.Sprintf("%s-%s", client.Id, key)
+func (client *DataSetClient) newBufferForEvents(session string, info *add_events.SessionInfo) {
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 
-	client.initBuffer(buf, client.SessionInfo)
+	client.initBuffer(buf, info)
 
 	client.buffersAllMutex.Lock()
 	client.buffers[session] = buf
@@ -128,7 +212,7 @@ func (client *DataSetClient) newBufferForEvents(key string) {
 }
 
 func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
-	client.Logger.Info("Listening to events with key",
+	client.Logger.Debug("Listening to events with key",
 		zap.String("key", key),
 	)
 
@@ -150,21 +234,20 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
 			client.Logger.Error(
-				"Cannot receive EventBundle from channel",
+				"Cannot receive EventWithMeta from channel",
 				zap.String("key", key),
 				zap.Any("msg", msg),
 			)
-			client.eventsBroken.Add(1)
+			client.statistics.EventsBrokenAdd(1)
 			client.lastAcceptedAt.Store(time.Now().UnixNano())
 			continue
 		}
 
-		bundle, ok := msg.(*add_events.EventBundle)
+		bundle, ok := msg.(EventWithMeta)
 		if ok {
 			buf := getBuffer(key)
-			client.fixServerHostsInBundle(bundle)
 
-			added, err := buf.AddBundle(bundle)
+			added, err := buf.AddBundle(bundle.EventBundle)
 			if err != nil {
 				if errors.Is(err, &buffer.NotAcceptingError{}) {
 					buf = getBuffer(key)
@@ -184,13 +267,13 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			}
 
 			if added == buffer.TooMuch {
-				added, err = buf.AddBundle(bundle)
+				added, err = buf.AddBundle(bundle.EventBundle)
 				if err != nil {
 					if errors.Is(err, &buffer.NotAcceptingError{}) {
 						buf = getBuffer(key)
 					} else {
 						client.Logger.Error("Cannot add bundle", zap.Error(err))
-						client.eventsDropped.Add(1)
+						client.statistics.EventsDroppedAdd(1)
 						continue
 					}
 				}
@@ -199,11 +282,11 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				}
 				if added == buffer.TooMuch {
 					client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
-					client.eventsDropped.Add(1)
+					client.statistics.EventsDroppedAdd(1)
 					continue
 				}
 			}
-			client.eventsProcessed.Add(1)
+			client.statistics.EventsProcessedAdd(1)
 
 			buf.SetStatus(buffer.Ready)
 			// it could happen that the buffer could have been published
@@ -213,12 +296,16 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				client.publishBuffer(buf)
 			}
 		} else {
+			_, purgeReadSuccess := msg.(Purge)
+			if purgeReadSuccess {
+				break
+			}
 			client.Logger.Error(
-				"Cannot convert message to EventBundle",
+				"Cannot convert message to EventWithMeta",
 				zap.String("key", key),
 				zap.Any("msg", msg),
 			)
-			client.eventsBroken.Add(1)
+			client.statistics.EventsBrokenAdd(1)
 		}
 	}
 }
@@ -226,13 +313,13 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 // isProcessingBuffers returns True if there are still some unprocessed buffers.
 // False otherwise.
 func (client *DataSetClient) isProcessingBuffers() bool {
-	return client.buffersEnqueued.Load() > (client.buffersProcessed.Load() + client.buffersDropped.Load() + client.buffersBroken.Load())
+	return client.statistics.BuffersEnqueued() > (client.statistics.BuffersProcessed() + client.statistics.BuffersDropped() + client.statistics.BuffersBroken())
 }
 
 // isProcessingEvents returns True if there are still some unprocessed events.
 // False otherwise.
 func (client *DataSetClient) isProcessingEvents() bool {
-	return client.eventsEnqueued.Load() > (client.eventsProcessed.Load() + client.eventsDropped.Load() + client.eventsBroken.Load())
+	return client.statistics.EventsEnqueued() > (client.statistics.EventsProcessed() + client.statistics.EventsDropped() + client.statistics.EventsBroken())
 }
 
 // Shutdown takes care of shutdown of client. It does following steps
@@ -273,7 +360,7 @@ func (client *DataSetClient) Shutdown() error {
 	// try (with timeout) to process (add into buffers) events,
 	retryNum := 0
 	expBackoff.Reset()
-	initialEventsDropped := client.eventsDropped.Load()
+	initialEventsDropped := client.statistics.EventsDropped()
 	for client.isProcessingEvents() {
 		// log statistics
 		client.logStatistics()
@@ -283,8 +370,8 @@ func (client *DataSetClient) Shutdown() error {
 			"Shutting down - processing events",
 			zap.Int("retryNum", retryNum),
 			zap.Duration("backoffDelay", backoffDelay),
-			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
-			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+			zap.Uint64("eventsEnqueued", client.statistics.EventsEnqueued()),
+			zap.Uint64("eventsProcessed", client.statistics.EventsProcessed()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
 			zap.Duration("maxElapsedTime", maxElapsedTime),
 		)
@@ -325,7 +412,7 @@ func (client *DataSetClient) Shutdown() error {
 	// do wait (with timeout) for all buffers to be sent to the server
 	retryNum = 0
 	expBackoff.Reset()
-	initialBuffersDropped := client.buffersDropped.Load()
+	initialBuffersDropped := client.statistics.BuffersDropped()
 	for client.isProcessingBuffers() {
 		// log statistics
 		client.logStatistics()
@@ -335,9 +422,9 @@ func (client *DataSetClient) Shutdown() error {
 			"Shutting down - processing buffers",
 			zap.Int("retryNum", retryNum),
 			zap.Duration("backoffDelay", backoffDelay),
-			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
-			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
-			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+			zap.Uint64("buffersEnqueued", client.statistics.BuffersEnqueued()),
+			zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
+			zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
 			zap.Duration("maxElapsedTime", maxElapsedTime),
 		)
@@ -352,30 +439,30 @@ func (client *DataSetClient) Shutdown() error {
 	if client.isProcessingEvents() {
 		lastError = fmt.Errorf(
 			"not all events have been processed - %d",
-			client.eventsEnqueued.Load()-client.eventsProcessed.Load(),
+			client.statistics.EventsEnqueued()-client.statistics.EventsProcessed(),
 		)
 		client.Logger.Error(
 			"Shutting down - not all events have been processed",
-			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
-			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+			zap.Uint64("eventsEnqueued", client.statistics.EventsEnqueued()),
+			zap.Uint64("eventsProcessed", client.statistics.EventsProcessed()),
 		)
 	}
 
 	if client.isProcessingBuffers() {
 		lastError = fmt.Errorf(
 			"not all buffers have been processed - %d",
-			client.buffersEnqueued.Load()-client.buffersProcessed.Load()-client.buffersDropped.Load(),
+			client.statistics.BuffersEnqueued()-client.statistics.BuffersProcessed()-client.statistics.BuffersDropped(),
 		)
 		client.Logger.Error(
 			"Shutting down - not all buffers have been processed",
 			zap.Int("retryNum", retryNum),
-			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
-			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
-			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+			zap.Uint64("buffersEnqueued", client.statistics.BuffersEnqueued()),
+			zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
+			zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
 		)
 	}
 
-	eventsDropped := client.eventsDropped.Load() - initialEventsDropped
+	eventsDropped := client.statistics.EventsDropped() - initialEventsDropped
 	if eventsDropped > 0 {
 		lastError = fmt.Errorf(
 			"some events were dropped during finishing - %d",
@@ -387,7 +474,7 @@ func (client *DataSetClient) Shutdown() error {
 		)
 	}
 
-	buffersDropped := client.buffersDropped.Load() - initialBuffersDropped
+	buffersDropped := client.statistics.BuffersDropped() - initialBuffersDropped
 	if buffersDropped > 0 {
 		lastError = fmt.Errorf(
 			"some buffers were dropped during finishing - %d",
@@ -437,6 +524,7 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 		)...,
 	)
 	resp := &add_events.AddEventsResponse{}
+	client.statistics.PayloadSizeRecord(int64(len(payload)))
 
 	httpRequest, err := request.NewApiRequest(
 		http.MethodPost, client.addEventsEndpointUrl,
@@ -445,8 +533,11 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 		return nil, len(payload), fmt.Errorf("cannot create request: %w", err)
 	}
 
+	apiCallStart := time.Now()
 	err = client.apiCall(httpRequest, resp)
-	client.bytesAPISent.Add(uint64(len(payload)))
+	apiCallEnd := time.Now()
+	client.statistics.ResponseTimeRecord(apiCallEnd.Sub(apiCallStart))
+	client.statistics.BytesAPISentAdd(uint64(len(payload)))
 
 	if strings.HasPrefix(resp.Status, "error") {
 		client.Logger.Error(
@@ -481,7 +572,7 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 func (client *DataSetClient) apiCall(req *http.Request, response response.ResponseObjSetter) error {
 	resp, err := client.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("unable to send request: %w", err)
+		return fmt.Errorf("%s: %w", errMsgUnableToSentRequest, err)
 	}
 
 	defer func() {
@@ -506,12 +597,12 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("unable to read response: %w", err)
+		return fmt.Errorf("%s: %w", errMsgUnableToReadResponse, err)
 	}
 
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
-		return fmt.Errorf("unable to parse response body: %w, url: %s, response: %s", err, client.addEventsEndpointUrl, truncateText(string(responseBody), 1000))
+		return fmt.Errorf("%s: %w, url: %s, status: %d, response: %s", errMsgUnableToParseResponse, err, client.addEventsEndpointUrl, resp.StatusCode, truncateText(string(responseBody), 1000))
 	}
 
 	response.SetResponseObj(resp)

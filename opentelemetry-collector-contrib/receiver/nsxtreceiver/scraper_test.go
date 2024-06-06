@@ -18,14 +18,14 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/golden"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/pmetrictest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/nsxtreceiver/internal/metadata"
 	dm "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/nsxtreceiver/internal/model"
 )
 
 func TestScrape(t *testing.T) {
-	mockClient := NewMockClient(t)
+	mockClient := newMockClient(t)
 
 	mockClient.On("ClusterNodes", mock.Anything).Return(loadTestClusterNodes())
 	mockClient.On("TransportNodes", mock.Anything).Return(loadTestTransportNodes())
@@ -68,7 +68,7 @@ func TestScrape(t *testing.T) {
 }
 
 func TestScrapeTransportNodeErrors(t *testing.T) {
-	mockClient := NewMockClient(t)
+	mockClient := newMockClient(t)
 	mockClient.On("TransportNodes", mock.Anything).Return(nil, errUnauthorized)
 	scraper := newScraper(
 		&Config{
@@ -84,7 +84,7 @@ func TestScrapeTransportNodeErrors(t *testing.T) {
 }
 
 func TestScrapeClusterNodeErrors(t *testing.T) {
-	mockClient := NewMockClient(t)
+	mockClient := newMockClient(t)
 
 	mockClient.On("ClusterNodes", mock.Anything).Return(nil, errUnauthorized)
 	mockClient.On("TransportNodes", mock.Anything).Return(loadTestTransportNodes())
@@ -103,10 +103,12 @@ func TestScrapeClusterNodeErrors(t *testing.T) {
 
 func TestStartClientAlreadySet(t *testing.T) {
 	mockClient := mockServer(t)
+	defer mockClient.Close()
+
 	scraper := newScraper(
 		&Config{
 			MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
-			HTTPClientSettings: confighttp.HTTPClientSettings{
+			ClientConfig: confighttp.ClientConfig{
 				Endpoint: mockClient.URL,
 			},
 		},
@@ -120,7 +122,7 @@ func TestStartBadUrl(t *testing.T) {
 	scraper := newScraper(
 		&Config{
 			MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
-			HTTPClientSettings: confighttp.HTTPClientSettings{
+			ClientConfig: confighttp.ClientConfig{
 				Endpoint: "\x00",
 			},
 		},
@@ -134,7 +136,7 @@ func TestStartBadUrl(t *testing.T) {
 func TestScraperRecordNoStat(_ *testing.T) {
 	scraper := newScraper(
 		&Config{
-			HTTPClientSettings: confighttp.HTTPClientSettings{
+			ClientConfig: confighttp.ClientConfig{
 				Endpoint: "http://localhost",
 			},
 			MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),

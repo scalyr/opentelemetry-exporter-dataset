@@ -82,9 +82,9 @@ func createTestBundle() add_events.EventBundle {
 
 func createEmptyBuffer() *Buffer {
 	sessionInfo := &add_events.SessionInfo{
-		ServerId:   "serverId",
-		ServerType: "serverType",
-		Region:     "region",
+		"serverId":   "serverId",
+		"serverType": "serverType",
+		"region":     "region",
 	}
 	session := "session"
 	token := "token"
@@ -136,9 +136,9 @@ func TestPayloadFull(t *testing.T) {
 
 func TestPayloadInjection(t *testing.T) {
 	sessionInfo := &add_events.SessionInfo{
-		ServerId:   "serverId\",\"sI\":\"I",
-		ServerType: "serverType\",\"sT\":\"T",
-		Region:     "region\",\"r\":\"R",
+		"serverId":   "serverId\",\"sI\":\"I",
+		"serverType": "serverType\",\"sT\":\"T",
+		"region":     "region\",\"r\":\"R",
 	}
 	session := "session\",\"s\":\"S"
 	token := "token\",\"events\":[{}],\"foo\":\"bar"

@@ -6,8 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("dataset")
+)
+
 const (
-	Type            = "dataset"
 	LogsStability   = component.StabilityLevelAlpha
 	TracesStability = component.StabilityLevelAlpha
 )

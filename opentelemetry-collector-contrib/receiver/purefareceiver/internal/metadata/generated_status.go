@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("purefa")
+)
+
 const (
-	Type             = "purefa"
 	MetricsStability = component.StabilityLevelDevelopment
 )

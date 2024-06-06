@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("instana")
+)
+
 const (
-	Type            = "instana"
-	TracesStability = component.StabilityLevelAlpha
+	TracesStability = component.StabilityLevelDeprecated
 )

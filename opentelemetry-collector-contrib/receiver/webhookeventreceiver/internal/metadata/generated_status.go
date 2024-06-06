@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("webhookevent")
+)
+
 const (
-	Type          = "webhookevent"
 	LogsStability = component.StabilityLevelAlpha
 )
