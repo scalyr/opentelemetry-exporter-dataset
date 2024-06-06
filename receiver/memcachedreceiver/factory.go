@@ -37,7 +37,7 @@ func createDefaultConfig() component.Config {
 
 	return &Config{
 		ScraperControllerSettings: cfg,
-		AddrConfig: confignet.AddrConfig{
+		NetAddr: confignet.NetAddr{
 			Endpoint: defaultEndpoint,
 		},
 		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),

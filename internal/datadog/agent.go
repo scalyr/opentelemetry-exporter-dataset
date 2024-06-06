@@ -16,8 +16,6 @@ import (
 	traceconfig "github.com/DataDog/datadog-agent/pkg/trace/config"
 	"github.com/DataDog/datadog-agent/pkg/trace/stats"
 	"github.com/DataDog/datadog-agent/pkg/trace/telemetry"
-	"github.com/DataDog/datadog-agent/pkg/trace/timing"
-	"github.com/DataDog/datadog-go/v5/statsd"
 	"github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/metrics"
 	"go.opentelemetry.io/collector/featuregate"
 	"go.opentelemetry.io/collector/pdata/ptrace"
@@ -38,21 +36,21 @@ type TraceAgent struct {
 	exit chan struct{}
 }
 
-var _ = featuregate.GlobalRegistry().MustRegister(
+// ConnectorPerformanceFeatureGate uses optimized code paths for the Datadog Connector.
+var ConnectorPerformanceFeatureGate = featuregate.GlobalRegistry().MustRegister(
 	"connector.datadogconnector.performance",
-	featuregate.StageStable,
+	featuregate.StageBeta,
 	featuregate.WithRegisterDescription("Datadog Connector will use optimized code"),
-	featuregate.WithRegisterToVersion("0.97.0"),
 )
 
 // newAgent creates a new unstarted traceagent using the given context. Call Start to start the traceagent.
 // The out channel will receive outoing stats payloads resulting from spans ingested using the Ingest method.
-func NewAgent(ctx context.Context, out chan *pb.StatsPayload, metricsClient statsd.ClientInterface, timingReporter timing.Reporter) *TraceAgent {
-	return NewAgentWithConfig(ctx, traceconfig.New(), out, metricsClient, timingReporter)
+func NewAgent(ctx context.Context, out chan *pb.StatsPayload) *TraceAgent {
+	return NewAgentWithConfig(ctx, traceconfig.New(), out)
 }
 
 // newAgentWithConfig creates a new traceagent with the given config cfg. Used in tests; use newAgent instead.
-func NewAgentWithConfig(ctx context.Context, cfg *traceconfig.AgentConfig, out chan *pb.StatsPayload, metricsClient statsd.ClientInterface, timingReporter timing.Reporter) *TraceAgent {
+func NewAgentWithConfig(ctx context.Context, cfg *traceconfig.AgentConfig, out chan *pb.StatsPayload) *TraceAgent {
 	// disable the HTTP receiver
 	cfg.ReceiverPort = 0
 	// set the API key to succeed startup; it is never used nor needed
@@ -64,16 +62,16 @@ func NewAgentWithConfig(ctx context.Context, cfg *traceconfig.AgentConfig, out c
 	// Ingest). This gives a better user experience.
 	cfg.Hostname = metrics.UnsetHostnamePlaceholder
 	pchan := make(chan *api.Payload, 1000)
-	a := agent.NewAgent(ctx, cfg, telemetry.NewNoopCollector(), metricsClient)
+	a := agent.NewAgent(ctx, cfg, telemetry.NewNoopCollector())
 	// replace the Concentrator (the component which computes and flushes APM Stats from incoming
 	// traces) with our own, which uses the 'out' channel.
-	a.Concentrator = stats.NewConcentrator(cfg, out, time.Now(), metricsClient)
+	a.Concentrator = stats.NewConcentrator(cfg, out, time.Now())
 	// ...and the same for the ClientStatsAggregator; we don't use it here, but it is also a source
 	// of stats which should be available to us.
-	a.ClientStatsAggregator = stats.NewClientStatsAggregator(cfg, out, metricsClient)
+	a.ClientStatsAggregator = stats.NewClientStatsAggregator(cfg, out)
 	// lastly, start the OTLP receiver, which will be used to introduce ResourceSpans into the traceagent,
 	// so that we can transform them to Datadog spans and receive stats.
-	a.OTLPReceiver = api.NewOTLPReceiver(pchan, cfg, metricsClient, timingReporter)
+	a.OTLPReceiver = api.NewOTLPReceiver(pchan, cfg)
 	return &TraceAgent{
 		Agent: a,
 		exit:  make(chan struct{}),

@@ -59,11 +59,20 @@ func match[T Matchable](ele T, expect bool) func(t *testing.T, fileset *Fileset[
 	}
 }
 
+func newFingerprint(bytes []byte) *fingerprint.Fingerprint {
+	return &fingerprint.Fingerprint{
+		FirstBytes: bytes,
+	}
+}
+func newMetadata(bytes []byte) *reader.Metadata {
+	return &reader.Metadata{
+		Fingerprint: newFingerprint(bytes),
+	}
+}
+
 func newReader(bytes []byte) *reader.Reader {
 	return &reader.Reader{
-		Metadata: &reader.Metadata{
-			Fingerprint: fingerprint.New(bytes),
-		},
+		Metadata: newMetadata(bytes),
 	}
 }
 

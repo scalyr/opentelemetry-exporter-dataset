@@ -416,6 +416,5 @@ func TestNewEndpointClient(t *testing.T) {
 	fakeClientSet := fake.NewSimpleClientset(endpointsArray...)
 	client := newEpClient(fakeClientSet, zap.NewNop(), setOption)
 	assert.NotNil(t, client)
-	client.shutdown()
 	removeTempKubeConfig()
 }

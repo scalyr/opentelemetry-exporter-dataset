@@ -9,4 +9,5 @@ status:
     active: [TylerHelmuth, fchikwekwe]
 
 tests:
+  config:
   expect_consumer_error: true

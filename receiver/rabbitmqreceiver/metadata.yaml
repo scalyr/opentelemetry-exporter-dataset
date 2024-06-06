@@ -7,7 +7,6 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [djaglowski, cpheps]
-    seeking_new: true
 
 resource_attributes:
   rabbitmq.queue.name:
@@ -81,3 +80,6 @@ metrics:
       value_type: int
     attributes: [message.state]
     enabled: true
+
+tests:
+  config:

@@ -17,7 +17,3 @@ metrics:
     unit: s
     gauge:
       value_type: double
-
-tests:
-  skip_lifecycle: true
-  skip_shutdown: true

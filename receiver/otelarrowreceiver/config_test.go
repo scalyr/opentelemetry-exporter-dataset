@@ -49,7 +49,7 @@ func TestUnmarshalConfig(t *testing.T) {
 		&Config{
 			Protocols: Protocols{
 				GRPC: configgrpc.ServerConfig{
-					NetAddr: confignet.AddrConfig{
+					NetAddr: confignet.NetAddr{
 						Endpoint:  "0.0.0.0:4317",
 						Transport: "tcp",
 					},
@@ -98,7 +98,7 @@ func TestUnmarshalConfigUnix(t *testing.T) {
 		&Config{
 			Protocols: Protocols{
 				GRPC: configgrpc.ServerConfig{
-					NetAddr: confignet.AddrConfig{
+					NetAddr: confignet.NetAddr{
 						Endpoint:  "/tmp/grpc_otlp.sock",
 						Transport: "unix",
 					},

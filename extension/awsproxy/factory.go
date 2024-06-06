@@ -33,7 +33,7 @@ func NewFactory() extension.Factory {
 func createDefaultConfig() component.Config {
 	return &Config{
 		ProxyConfig: proxy.Config{
-			TCPAddrConfig: confignet.TCPAddrConfig{
+			TCPAddr: confignet.TCPAddr{
 				Endpoint: localhostgate.EndpointForPort(defaultPort),
 			},
 			TLSSetting: configtls.TLSClientSetting{

@@ -26,12 +26,10 @@ func TestCreateMetricsExporterError(t *testing.T) {
 	cfg := &Config{
 		FormatType: formatTypeJSON,
 	}
-	e, err := createMetricsExporter(
+	_, err := createMetricsExporter(
 		context.Background(),
 		exportertest.NewNopCreateSettings(),
 		cfg)
-	require.NoError(t, err)
-	err = e.Start(context.Background(), componenttest.NewNopHost())
 	assert.Error(t, err)
 }
 
@@ -67,12 +65,10 @@ func TestCreateTracesExporterError(t *testing.T) {
 	cfg := &Config{
 		FormatType: formatTypeJSON,
 	}
-	e, err := createTracesExporter(
+	_, err := createTracesExporter(
 		context.Background(),
 		exportertest.NewNopCreateSettings(),
 		cfg)
-	require.NoError(t, err)
-	err = e.Start(context.Background(), componenttest.NewNopHost())
 	assert.Error(t, err)
 }
 
@@ -94,12 +90,10 @@ func TestCreateLogsExporterError(t *testing.T) {
 	cfg := &Config{
 		FormatType: formatTypeJSON,
 	}
-	e, err := createLogsExporter(
+	_, err := createLogsExporter(
 		context.Background(),
 		exportertest.NewNopCreateSettings(),
 		cfg)
-	require.NoError(t, err)
-	err = e.Start(context.Background(), componenttest.NewNopHost())
 	assert.Error(t, err)
 }
 

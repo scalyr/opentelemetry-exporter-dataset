@@ -81,7 +81,6 @@ func TestSetTimeStamp(t *testing.T) {
 		recordedRequests, _ = io.ReadAll(req.Body)
 		rw.WriteHeader(http.StatusOK)
 	}))
-	defer func() { server.Close() }()
 	ld := generateLogsOneEmptyTimestamp()
 	cfg := &Config{
 		Region: "us",

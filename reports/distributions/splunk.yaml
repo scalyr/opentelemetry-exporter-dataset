@@ -24,7 +24,6 @@ components:
         - signalfx
         - splunk_hec
     extension:
-        - ack
         - basicauth
         - docker_observer
         - ecs_observer
@@ -32,6 +31,7 @@ components:
         - file_storage
         - health_check
         - host_observer
+        - http_forwarder
         - k8s_observer
         - pprof
     processor:
@@ -46,6 +46,7 @@ components:
         - resourcedetection
         - routing
         - span
+        - spanmetrics
         - tail_sampling
         - transform
     receiver:

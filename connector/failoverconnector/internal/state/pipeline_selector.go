@@ -6,7 +6,6 @@ package state // import "github.com/open-telemetry/opentelemetry-collector-contr
 import (
 	"context"
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -19,9 +18,11 @@ type PipelineSelector struct {
 	constants       PSConstants
 	RS              *RetryState
 
-	errTryLock    *TryLock
-	stableTryLock *TryLock
-	chans         []chan bool
+	errTryLock     *TryLock
+	stableTryLock  *TryLock
+	chans          []chan bool
+	nextIndex      chan int
+	newStableIndex chan int
 }
 
 func (p *PipelineSelector) handlePipelineError(idx int) {
@@ -44,14 +45,15 @@ func (p *PipelineSelector) enableRetry(ctx context.Context) {
 		ticker := time.NewTicker(p.constants.RetryInterval)
 		defer ticker.Stop()
 
+		stableIndex := p.loadStable()
 		var cancelFunc context.CancelFunc
-		for p.checkContinueRetry(p.loadStable()) {
+		for p.checkContinueRetry(stableIndex) {
 			select {
 			case <-ticker.C:
 				if cancelFunc != nil {
 					cancelFunc()
 				}
-				cancelFunc = p.handleRetry(ctx)
+				cancelFunc = p.handleRetry(ctx, stableIndex)
 			case <-ctx.Done():
 				return
 			}
@@ -61,9 +63,9 @@ func (p *PipelineSelector) enableRetry(ctx context.Context) {
 }
 
 // handleRetry is responsible for launching goroutine and returning cancelFunc
-func (p *PipelineSelector) handleRetry(parentCtx context.Context) context.CancelFunc {
+func (p *PipelineSelector) handleRetry(parentCtx context.Context, stableIndex int) context.CancelFunc {
 	retryCtx, cancelFunc := context.WithCancel(parentCtx)
-	go p.retryHighPriorityPipelines(retryCtx, p.constants.RetryGap)
+	go p.retryHighPriorityPipelines(retryCtx, stableIndex, p.constants.RetryGap)
 	return cancelFunc
 }
 
@@ -81,19 +83,17 @@ func (p *PipelineSelector) setToNextPriorityPipeline(idx int) {
 	for ok := true; ok; ok = p.exceededMaxRetries(idx) {
 		idx++
 	}
-	p.stableIndex.Store(int32(idx))
-	p.currentIndex.Store(int32(idx))
+	p.newStableIndex <- idx
 }
 
 // RetryHighPriorityPipelines responsible for single iteration through all higher priority pipelines
-func (p *PipelineSelector) retryHighPriorityPipelines(ctx context.Context, retryGap time.Duration) {
-
+func (p *PipelineSelector) retryHighPriorityPipelines(ctx context.Context, stableIndex int, retryGap time.Duration) {
 	ticker := time.NewTicker(retryGap)
 
 	defer ticker.Stop()
 
-	for i := 0; i < len(p.pipelineRetries); i++ {
-		if i > p.loadStable() {
+	for i := 0; i < stableIndex; i++ {
+		if stableIndex > p.loadStable() {
 			return
 		}
 		if p.maxRetriesUsed(i) {
@@ -103,7 +103,7 @@ func (p *PipelineSelector) retryHighPriorityPipelines(ctx context.Context, retry
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.currentIndex.Store(int32(i))
+			p.nextIndex <- i
 		}
 	}
 }
@@ -125,7 +125,7 @@ func (p *PipelineSelector) exceededMaxRetries(idx int) bool {
 // SetToStableIndex returns the CurrentIndex to the known Stable Index
 func (p *PipelineSelector) setToStableIndex(idx int) {
 	p.incrementRetryCount(idx)
-	p.currentIndex.Store(p.stableIndex.Load())
+	p.nextIndex <- p.loadStable()
 }
 
 // MaxRetriesUsed exported access to maxRetriesUsed
@@ -136,7 +136,7 @@ func (p *PipelineSelector) maxRetriesUsed(idx int) bool {
 // SetNewStableIndex Update stableIndex to the passed stable index
 func (p *PipelineSelector) setNewStableIndex(idx int) {
 	p.resetRetryCount(idx)
-	p.stableIndex.Store(int32(idx))
+	p.newStableIndex <- idx
 }
 
 // IndexIsStable returns if index passed is the stable index
@@ -186,17 +186,31 @@ func NewPipelineSelector(lenPriority int, consts PSConstants) *PipelineSelector 
 		errTryLock:      NewTryLock(),
 		stableTryLock:   NewTryLock(),
 		chans:           chans,
+		nextIndex:       make(chan int),
+		newStableIndex:  make(chan int),
 	}
 	return ps
 }
 
-func (p *PipelineSelector) Start(done chan struct{}, wg *sync.WaitGroup) {
-	wg.Add(1)
-	go p.ListenToChannels(done, wg)
+func (p *PipelineSelector) Start(done chan struct{}) {
+	go p.ManageIndexes(done)
+	go p.ListenToChannels(done)
 }
 
-func (p *PipelineSelector) ListenToChannels(done chan struct{}, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (p *PipelineSelector) ManageIndexes(done chan struct{}) {
+	for {
+		select {
+		case <-done:
+			return
+		case idx := <-p.nextIndex:
+			p.currentIndex.Store(int32(idx))
+		case idx := <-p.newStableIndex:
+			p.stableIndex.Store(int32(idx))
+		}
+	}
+}
+
+func (p *PipelineSelector) ListenToChannels(done chan struct{}) {
 	cases := make([]reflect.SelectCase, len(p.chans)+1)
 	for i, ch := range p.chans {
 		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
@@ -232,20 +246,4 @@ func (p *PipelineSelector) ChannelIndex(ch chan bool) int {
 		}
 	}
 	return -1
-}
-
-func (p *PipelineSelector) TestStableIndex() int {
-	return p.loadStable()
-}
-
-func (p *PipelineSelector) TestSetStableIndex(idx int32) {
-	p.stableIndex.Store(idx)
-}
-
-func (p *PipelineSelector) SetRetryCountToMax(idx int) {
-	p.pipelineRetries[idx].Store(int32(p.constants.MaxRetries))
-}
-
-func (p *PipelineSelector) ResetRetryCount(idx int) {
-	p.pipelineRetries[idx].Store(0)
 }

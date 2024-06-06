@@ -7,6 +7,3 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [aboguszewski-sumo]
-
-tests:
-  expect_consumer_error: true

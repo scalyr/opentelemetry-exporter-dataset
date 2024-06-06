@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -44,12 +43,15 @@ type opampAgent struct {
 }
 
 func (o *opampAgent) Start(_ context.Context, _ component.Host) error {
+	// TODO: Add OpAMP HTTP transport support.
+	o.opampClient = client.NewWebSocket(newLoggerFromZap(o.logger))
+
 	header := http.Header{}
-	for k, v := range o.cfg.Server.GetHeaders() {
+	for k, v := range o.cfg.Server.WS.Headers {
 		header.Set(k, string(v))
 	}
 
-	tls, err := o.cfg.Server.GetTLSSetting().LoadTLSConfig()
+	tls, err := o.cfg.Server.WS.TLSSetting.LoadTLSConfig()
 	if err != nil {
 		return err
 	}
@@ -57,7 +59,7 @@ func (o *opampAgent) Start(_ context.Context, _ component.Host) error {
 	settings := types.StartSettings{
 		Header:         header,
 		TLSConfig:      tls,
-		OpAMPServerURL: o.cfg.Server.GetEndpoint(),
+		OpAMPServerURL: o.cfg.Server.WS.Endpoint,
 		InstanceUid:    o.instanceID.String(),
 		Callbacks: types.CallbacksStruct{
 			OnConnectFunc: func(_ context.Context) {
@@ -102,13 +104,7 @@ func (o *opampAgent) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	o.logger.Debug("Stopping OpAMP client...")
-	err := o.opampClient.Stop(ctx)
-	// Opamp-go considers this an error, but the collector does not.
-	// https://github.com/open-telemetry/opamp-go/issues/255
-	if err != nil && strings.EqualFold(err.Error(), "cannot stop because not started") {
-		return nil
-	}
-	return err
+	return o.opampClient.Stop(ctx)
 }
 
 func (o *opampAgent) NotifyConfig(ctx context.Context, conf *confmap.Conf) error {
@@ -152,11 +148,11 @@ func newOpampAgent(cfg *Config, logger *zap.Logger, build component.BuildInfo, r
 	} else {
 		sid, ok := res.Attributes().Get(semconv.AttributeServiceInstanceID)
 		if ok {
-			parsedUUID, err := uuid.Parse(sid.AsString())
+			uuid, err := uuid.Parse(sid.AsString())
 			if err != nil {
 				return nil, err
 			}
-			uid = ulid.ULID(parsedUUID)
+			uid = ulid.ULID(uuid)
 		}
 	}
 
@@ -167,7 +163,6 @@ func newOpampAgent(cfg *Config, logger *zap.Logger, build component.BuildInfo, r
 		agentVersion: agentVersion,
 		instanceID:   uid,
 		capabilities: cfg.Capabilities,
-		opampClient:  cfg.Server.GetClient(logger),
 	}
 
 	return agent, nil

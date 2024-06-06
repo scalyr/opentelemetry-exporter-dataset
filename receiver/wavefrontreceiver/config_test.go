@@ -34,7 +34,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "allsettings"),
 			expected: &Config{
-				TCPAddrConfig: confignet.TCPAddrConfig{
+				TCPAddr: confignet.TCPAddr{
 					Endpoint: "localhost:8080",
 				},
 				TCPIdleTimeout:      5 * time.Second,

@@ -39,7 +39,7 @@ func NewFactory() receiver.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		NetAddr: confignet.AddrConfig{
+		NetAddr: confignet.NetAddr{
 			Endpoint:  defaultBindEndpoint,
 			Transport: defaultTransport,
 		},

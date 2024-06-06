@@ -7,4 +7,6 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [dehaansa, djaglowski]
-    seeking_new: true
+
+tests:
+  config:

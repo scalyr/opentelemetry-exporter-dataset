@@ -9,4 +9,5 @@ status:
     active: [jacobmarble]
 
 tests:
+  config:
   expect_consumer_error: true

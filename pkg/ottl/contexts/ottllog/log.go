@@ -18,10 +18,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/internal/ottlcommon"
 )
 
-const (
-	contextName = "Log"
-)
-
 var _ internal.ResourceContext = TransformContext{}
 var _ internal.InstrumentationScopeContext = TransformContext{}
 
@@ -177,17 +173,16 @@ func (pep *pathExpressionParser) parsePath(path ottl.Path[TransformContext]) (ot
 	case "severity_text":
 		return accessSeverityText(), nil
 	case "body":
-		nextPath := path.Next()
-		if nextPath != nil {
-			if nextPath.Name() == "string" {
+		if path.Next() != nil {
+			if path.Next().Name() == "string" {
 				return accessStringBody(), nil
 			}
-			return nil, internal.FormatDefaultErrorMessage(nextPath.Name(), nextPath.String(), contextName, internal.LogRef)
+		} else {
+			if path.Keys() == nil {
+				return accessBody(), nil
+			}
+			return accessBodyKey(path.Keys()), nil
 		}
-		if path.Keys() == nil {
-			return accessBody(), nil
-		}
-		return accessBodyKey(path.Keys()), nil
 	case "attributes":
 		if path.Keys() == nil {
 			return accessAttributes(), nil
@@ -198,26 +193,23 @@ func (pep *pathExpressionParser) parsePath(path ottl.Path[TransformContext]) (ot
 	case "flags":
 		return accessFlags(), nil
 	case "trace_id":
-		nextPath := path.Next()
-		if nextPath != nil {
-			if nextPath.Name() == "string" {
+		if path.Next() != nil {
+			if path.Next().Name() == "string" {
 				return accessStringTraceID(), nil
 			}
-			return nil, internal.FormatDefaultErrorMessage(nextPath.Name(), nextPath.String(), contextName, internal.LogRef)
+		} else {
+			return accessTraceID(), nil
 		}
-		return accessTraceID(), nil
 	case "span_id":
-		nextPath := path.Next()
-		if nextPath != nil {
-			if nextPath.Name() == "string" {
+		if path.Next() != nil {
+			if path.Next().Name() == "string" {
 				return accessStringSpanID(), nil
 			}
-			return nil, internal.FormatDefaultErrorMessage(nextPath.Name(), path.String(), contextName, internal.LogRef)
+		} else {
+			return accessSpanID(), nil
 		}
-		return accessSpanID(), nil
-	default:
-		return nil, internal.FormatDefaultErrorMessage(path.Name(), path.String(), contextName, internal.LogRef)
 	}
+	return nil, fmt.Errorf("invalid path expression %v", path)
 }
 
 func accessCache() ottl.StandardGetSetter[TransformContext] {

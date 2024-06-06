@@ -89,7 +89,7 @@ func startGRPCServer(t *testing.T) (*grpc.ClientConn, *consumertest.LogsSink) {
 	config := &Config{
 		Protocols: Protocols{
 			GRPC: &configgrpc.ServerConfig{
-				NetAddr: confignet.AddrConfig{
+				NetAddr: confignet.NetAddr{
 					Endpoint:  testutil.GetAvailableLocalAddress(t),
 					Transport: "tcp",
 				},

@@ -39,7 +39,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "allsettings"),
 			expected: &Config{
-				TCPAddrConfig: confignet.TCPAddrConfig{
+				TCPAddr: confignet.TCPAddr{
 					Endpoint: "localhost:8080",
 				},
 				MaxIdleConns: 15,
@@ -94,7 +94,7 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "invalid_tcp_addr",
 			config: &Config{
-				TCPAddrConfig: confignet.TCPAddrConfig{
+				TCPAddr: confignet.TCPAddr{
 					Endpoint: "http://localhost:2003",
 				},
 			},
@@ -103,7 +103,7 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "invalid_timeout",
 			config: &Config{
-				TCPAddrConfig: confignet.TCPAddrConfig{Endpoint: defaultEndpoint},
+				TCPAddr: confignet.TCPAddr{Endpoint: defaultEndpoint},
 				TimeoutSettings: exporterhelper.TimeoutSettings{
 					Timeout: -5 * time.Second,
 				},
@@ -113,8 +113,8 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "invalid_max_idle_conns",
 			config: &Config{
-				TCPAddrConfig: confignet.TCPAddrConfig{Endpoint: defaultEndpoint},
-				MaxIdleConns:  -1,
+				TCPAddr:      confignet.TCPAddr{Endpoint: defaultEndpoint},
+				MaxIdleConns: -1,
 			},
 			wantErr: true,
 		},

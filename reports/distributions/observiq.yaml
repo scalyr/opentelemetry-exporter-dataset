@@ -15,6 +15,7 @@ components:
         - datadog
         - dynatrace
         - elasticsearch
+        - f5cloud
         - file
         - googlecloud
         - googlecloudpubsub
@@ -53,6 +54,7 @@ components:
         - resourcedetection
         - routing
         - span
+        - spanmetrics
         - tail_sampling
         - transform
     receiver:

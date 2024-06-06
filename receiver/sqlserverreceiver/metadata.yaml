@@ -7,8 +7,6 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [djaglowski, StefanKurek]
-    seeking_new: true
-  unsupported_platforms: [darwin, linux]
 
 resource_attributes:
   sqlserver.database.name:
@@ -157,6 +155,3 @@ metrics:
     unit: "{transactions}/s"
     gauge:
       value_type: double
-
-tests:
-  config:

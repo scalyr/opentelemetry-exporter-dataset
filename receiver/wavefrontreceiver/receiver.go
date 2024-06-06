@@ -42,7 +42,7 @@ func (r *metricsReceiver) Start(ctx context.Context, host component.Host) error 
 	// The Wavefront receiver leverages the Carbon receiver code by implementing
 	// a dedicated parser for its format.
 	carbonCfg := &carbonreceiver.Config{
-		AddrConfig: confignet.AddrConfig{
+		NetAddr: confignet.NetAddr{
 			Endpoint:  r.cfg.Endpoint,
 			Transport: "tcp",
 		},

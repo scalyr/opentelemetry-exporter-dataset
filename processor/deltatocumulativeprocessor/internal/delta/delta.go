@@ -34,21 +34,29 @@ type Accumulator[D data.Point[D]] struct {
 // Aggregate implements delta-to-cumulative aggregation as per spec:
 // https://opentelemetry.io/docs/specs/otel/metrics/data-model/#sums-delta-to-cumulative
 func (a *Accumulator[D]) Aggregate(id streams.Ident, dp D) (D, error) {
-	aggr, ok := a.dps[id]
-
-	// new series: initialize with current sample
-	if !ok {
+	// make the accumulator to start with the current sample, discarding any
+	// earlier data. return after use
+	reset := func() (D, error) {
 		a.dps[id] = dp.Clone()
 		return a.dps[id], nil
 	}
 
-	// drop bad samples
-	switch {
-	case dp.StartTimestamp() < aggr.StartTimestamp():
-		// belongs to older series
+	aggr, ok := a.dps[id]
+
+	// new series: reset
+	if !ok {
+		return reset()
+	}
+	// belongs to older series: drop
+	if dp.StartTimestamp() < aggr.StartTimestamp() {
 		return aggr, ErrOlderStart{Start: aggr.StartTimestamp(), Sample: dp.StartTimestamp()}
-	case dp.Timestamp() <= aggr.Timestamp():
-		// out of order
+	}
+	// belongs to later series: reset
+	if dp.StartTimestamp() > aggr.StartTimestamp() {
+		return reset()
+	}
+	// out of order: drop
+	if dp.Timestamp() <= aggr.Timestamp() {
 		return aggr, ErrOutOfOrder{Last: aggr.Timestamp(), Sample: dp.Timestamp()}
 	}
 

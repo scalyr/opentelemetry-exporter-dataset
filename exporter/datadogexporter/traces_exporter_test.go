@@ -133,10 +133,10 @@ func TestTracesSource(t *testing.T) {
 			Hostname: "fallbackHostname",
 		},
 		Metrics: MetricsConfig{
-			TCPAddrConfig: confignet.TCPAddrConfig{Endpoint: metricsServer.URL},
+			TCPAddr: confignet.TCPAddr{Endpoint: metricsServer.URL},
 		},
 		Traces: TracesConfig{
-			TCPAddrConfig:   confignet.TCPAddrConfig{Endpoint: tracesServer.URL},
+			TCPAddr:         confignet.TCPAddr{Endpoint: tracesServer.URL},
 			IgnoreResources: []string{},
 		},
 	}
@@ -248,12 +248,12 @@ func TestTraceExporter(t *testing.T) {
 			Hostname: "test-host",
 		},
 		Metrics: MetricsConfig{
-			TCPAddrConfig: confignet.TCPAddrConfig{
+			TCPAddr: confignet.TCPAddr{
 				Endpoint: metricsServer.URL,
 			},
 		},
 		Traces: TracesConfig{
-			TCPAddrConfig: confignet.TCPAddrConfig{
+			TCPAddr: confignet.TCPAddr{
 				Endpoint: server.URL,
 			},
 			IgnoreResources: []string{},
@@ -286,7 +286,7 @@ func TestNewTracesExporter(t *testing.T) {
 
 	cfg := &Config{}
 	cfg.API.Key = "ddog_32_characters_long_api_key1"
-	cfg.Metrics.TCPAddrConfig.Endpoint = metricsServer.URL
+	cfg.Metrics.TCPAddr.Endpoint = metricsServer.URL
 	params := exportertest.NewNopCreateSettings()
 
 	// The client should have been created correctly
@@ -307,10 +307,10 @@ func TestPushTraceData(t *testing.T) {
 			Hostname: "test-host",
 		},
 		Metrics: MetricsConfig{
-			TCPAddrConfig: confignet.TCPAddrConfig{Endpoint: server.URL},
+			TCPAddr: confignet.TCPAddr{Endpoint: server.URL},
 		},
 		Traces: TracesConfig{
-			TCPAddrConfig: confignet.TCPAddrConfig{Endpoint: server.URL},
+			TCPAddr: confignet.TCPAddr{Endpoint: server.URL},
 		},
 
 		HostMetadata: HostMetadataConfig{

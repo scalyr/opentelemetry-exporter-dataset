@@ -16,7 +16,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/emittest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/filetest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/fingerprint"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/scanner"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/split"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/testutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/trim"
@@ -29,14 +28,13 @@ const (
 
 func testFactory(t *testing.T, opts ...testFactoryOpt) (*Factory, *emittest.Sink) {
 	cfg := &testFactoryCfg{
-		fromBeginning:     true,
-		fingerprintSize:   fingerprint.DefaultSize,
-		initialBufferSize: scanner.DefaultBufferSize,
-		maxLogSize:        defaultMaxLogSize,
-		encoding:          unicode.UTF8,
-		trimFunc:          trim.Whitespace,
-		flushPeriod:       defaultFlushPeriod,
-		sinkChanSize:      100,
+		fromBeginning:      true,
+		fingerprintSize:    fingerprint.DefaultSize,
+		maxLogSize:         defaultMaxLogSize,
+		encoding:           unicode.UTF8,
+		trimFunc:           trim.Whitespace,
+		flushPeriod:        defaultFlushPeriod,
+		sinkCallBufferSize: 100,
 		attributes: attrs.Resolver{
 			IncludeFileName: true,
 		},
@@ -48,35 +46,33 @@ func testFactory(t *testing.T, opts ...testFactoryOpt) (*Factory, *emittest.Sink
 	splitFunc, err := cfg.splitCfg.Func(cfg.encoding, false, cfg.maxLogSize)
 	require.NoError(t, err)
 
-	sink := emittest.NewSink(emittest.WithCallBuffer(cfg.sinkChanSize))
+	sink := emittest.NewSink(emittest.WithCallBuffer(cfg.sinkCallBufferSize))
 	return &Factory{
-		SugaredLogger:     testutil.Logger(t),
-		FromBeginning:     cfg.fromBeginning,
-		FingerprintSize:   cfg.fingerprintSize,
-		InitialBufferSize: cfg.initialBufferSize,
-		MaxLogSize:        cfg.maxLogSize,
-		Encoding:          cfg.encoding,
-		SplitFunc:         splitFunc,
-		TrimFunc:          cfg.trimFunc,
-		FlushTimeout:      cfg.flushPeriod,
-		EmitFunc:          sink.Callback,
-		Attributes:        cfg.attributes,
+		SugaredLogger:   testutil.Logger(t),
+		FromBeginning:   cfg.fromBeginning,
+		FingerprintSize: cfg.fingerprintSize,
+		MaxLogSize:      cfg.maxLogSize,
+		Encoding:        cfg.encoding,
+		SplitFunc:       splitFunc,
+		TrimFunc:        cfg.trimFunc,
+		FlushTimeout:    cfg.flushPeriod,
+		EmitFunc:        sink.Callback,
+		Attributes:      cfg.attributes,
 	}, sink
 }
 
 type testFactoryOpt func(*testFactoryCfg)
 
 type testFactoryCfg struct {
-	fromBeginning     bool
-	fingerprintSize   int
-	initialBufferSize int
-	maxLogSize        int
-	encoding          encoding.Encoding
-	splitCfg          split.Config
-	trimFunc          trim.Func
-	flushPeriod       time.Duration
-	sinkChanSize      int
-	attributes        attrs.Resolver
+	fromBeginning      bool
+	fingerprintSize    int
+	maxLogSize         int
+	encoding           encoding.Encoding
+	splitCfg           split.Config
+	trimFunc           trim.Func
+	flushPeriod        time.Duration
+	sinkCallBufferSize int
+	attributes         attrs.Resolver
 }
 
 func withFingerprintSize(size int) testFactoryOpt {
@@ -91,15 +87,9 @@ func withSplitConfig(cfg split.Config) testFactoryOpt {
 	}
 }
 
-func withInitialBufferSize(size int) testFactoryOpt {
+func withMaxLogSize(maxLogSize int) testFactoryOpt {
 	return func(c *testFactoryCfg) {
-		c.initialBufferSize = size
-	}
-}
-
-func withMaxLogSize(size int) testFactoryOpt {
-	return func(c *testFactoryCfg) {
-		c.maxLogSize = size
+		c.maxLogSize = maxLogSize
 	}
 }
 
@@ -109,9 +99,9 @@ func withFlushPeriod(flushPeriod time.Duration) testFactoryOpt {
 	}
 }
 
-func withSinkChanSize(n int) testFactoryOpt {
+func withSinkBufferSize(n int) testFactoryOpt {
 	return func(c *testFactoryCfg) {
-		c.sinkChanSize = n
+		c.sinkCallBufferSize = n
 	}
 }
 

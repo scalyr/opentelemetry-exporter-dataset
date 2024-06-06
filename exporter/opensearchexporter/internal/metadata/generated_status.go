@@ -13,8 +13,8 @@ var (
 )
 
 const (
-	LogsStability   = component.StabilityLevelDevelopment
 	TracesStability = component.StabilityLevelAlpha
+	LogsStability   = component.StabilityLevelDevelopment
 )
 
 func Meter(settings component.TelemetrySettings) metric.Meter {

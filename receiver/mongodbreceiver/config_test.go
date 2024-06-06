@@ -76,10 +76,10 @@ func TestValidate(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			var hosts []confignet.AddrConfig
+			var hosts []confignet.NetAddr
 
 			for _, ep := range tc.endpoints {
-				hosts = append(hosts, confignet.AddrConfig{
+				hosts = append(hosts, confignet.NetAddr{
 					Endpoint: ep,
 				})
 			}
@@ -134,7 +134,7 @@ func TestBadTLSConfigs(t *testing.T) {
 			cfg := &Config{
 				Username: "otel",
 				Password: "pword",
-				Hosts: []confignet.AddrConfig{
+				Hosts: []confignet.NetAddr{
 					{
 						Endpoint: "localhost:27017",
 					},
@@ -154,7 +154,7 @@ func TestBadTLSConfigs(t *testing.T) {
 
 func TestOptions(t *testing.T) {
 	cfg := &Config{
-		Hosts: []confignet.AddrConfig{
+		Hosts: []confignet.NetAddr{
 			{
 				Endpoint: "localhost:27017",
 			},
@@ -179,7 +179,7 @@ func TestOptionsTLS(t *testing.T) {
 	caFile := filepath.Join("testdata", "certs", "ca.crt")
 
 	cfg := &Config{
-		Hosts: []confignet.AddrConfig{
+		Hosts: []confignet.NetAddr{
 			{
 				Endpoint: "localhost:27017",
 			},
@@ -207,7 +207,7 @@ func TestLoadConfig(t *testing.T) {
 	require.NoError(t, component.UnmarshalConfig(sub, cfg))
 
 	expected := factory.CreateDefaultConfig().(*Config)
-	expected.Hosts = []confignet.AddrConfig{
+	expected.Hosts = []confignet.NetAddr{
 		{
 			Endpoint: "localhost:27017",
 		},

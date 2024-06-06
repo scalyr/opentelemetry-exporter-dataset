@@ -115,8 +115,7 @@ func TestChronyScraper(t *testing.T) {
 			chronym.On("GetTrackingData").Return(tc.mockTracking, tc.mockErr)
 
 			ctx := clock.Context(context.Background(), clck)
-			scraper := newScraper(ctx, tc.conf, receivertest.NewNopCreateSettings())
-			scraper.client = chronym
+			scraper := newScraper(ctx, chronym, tc.conf, receivertest.NewNopCreateSettings())
 
 			metrics, err := scraper.scrape(ctx)
 

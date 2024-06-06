@@ -8,6 +8,7 @@ beta_modules=(
   "go.opentelemetry.io/collector/config/configgrpc"
   "go.opentelemetry.io/collector/config/confighttp"
   "go.opentelemetry.io/collector/config/confignet"
+  "go.opentelemetry.io/collector/config/configopaque"
   "go.opentelemetry.io/collector/config/configtelemetry"
   "go.opentelemetry.io/collector/config/configtls"
   "go.opentelemetry.io/collector/config/internal"
@@ -36,5 +37,4 @@ beta_modules=(
 stable_modules=(
   "go.opentelemetry.io/collector/featuregate"
   "go.opentelemetry.io/collector/pdata"
-  "go.opentelemetry.io/collector/config/configopaque"
 )

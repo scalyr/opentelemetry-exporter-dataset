@@ -17,7 +17,7 @@ var _ component.ConfigValidator = (*Config)(nil)
 
 // Config defines configuration for the Carbon receiver.
 type Config struct {
-	confignet.AddrConfig `mapstructure:",squash"`
+	confignet.NetAddr `mapstructure:",squash"`
 
 	// TCPIdleTimeout is the timout for idle TCP connections, it is ignored
 	// if transport being used is UDP.

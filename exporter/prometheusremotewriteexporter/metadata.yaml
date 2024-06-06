@@ -9,4 +9,5 @@ status:
     active: [Aneurysm9, rapphil]
 
 tests:
+  config:
   expect_consumer_error: true

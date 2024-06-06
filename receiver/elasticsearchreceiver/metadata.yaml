@@ -7,7 +7,6 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [djaglowski, BinaryFissionGames]
-    seeking_new: true
 
 resource_attributes:
   elasticsearch.cluster.name:
@@ -995,6 +994,3 @@ metrics:
       value_type: int
     attributes: [ ]
     enabled: false
-
-tests:
-  config:

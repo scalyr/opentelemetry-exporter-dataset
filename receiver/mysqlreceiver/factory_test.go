@@ -45,7 +45,7 @@ func TestCreateMetricsReceiver(t *testing.T) {
 			},
 			Username: "otel",
 			Password: "otel",
-			AddrConfig: confignet.AddrConfig{
+			NetAddr: confignet.NetAddr{
 				Endpoint: "localhost:3306",
 			},
 		},

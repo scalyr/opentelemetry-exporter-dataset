@@ -33,7 +33,7 @@ func TestLoadConfig(t *testing.T) {
 			id: component.NewIDWithName(metadata.Type, "1"),
 			expected: &Config{
 				ProxyConfig: proxy.Config{
-					TCPAddrConfig: confignet.TCPAddrConfig{
+					TCPAddr: confignet.TCPAddr{
 						Endpoint: "0.0.0.0:1234",
 					},
 					ProxyAddress: "https://proxy.proxy.com",

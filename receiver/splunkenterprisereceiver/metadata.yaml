@@ -239,5 +239,3 @@ metrics:
       value_type: int
     attributes: [splunk.queue.name] 
 
-tests:
-  config:

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
@@ -19,22 +18,19 @@ func TestLoadMetadata(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "internal/samplereceiver/metadata.yaml",
+			name: "metadata-sample.yaml",
 			want: metadata{
-				Type:           "sample",
+				Type:           "file",
 				SemConvVersion: "1.9.0",
 				Status: &Status{
 					Class: "receiver",
-					Stability: map[component.StabilityLevel][]string{
-						component.StabilityLevelDevelopment: {"logs"},
-						component.StabilityLevelBeta:        {"traces"},
-						component.StabilityLevelStable:      {"metrics"},
+					Stability: map[string][]string{
+						"development": {"logs"},
+						"beta":        {"traces"},
+						"stable":      {"metrics"},
 					},
-					Distributions: []string{},
-					Codeowners: &Codeowners{
-						Active: []string{"dmitryax"},
-					},
-					Warnings: []string{"Any additional information that should be brought to the consumer's attention"},
+					Distributions: []string{"contrib"},
+					Warnings:      []string{"Any additional information that should be brought to the consumer's attention"},
 				},
 				ResourceAttributes: map[attributeName]attribute{
 					"string.resource.attr": {
@@ -217,8 +213,8 @@ func TestLoadMetadata(t *testing.T) {
 						},
 					},
 				},
-				ScopeName:       "otelcol/samplereceiver",
-				ShortFolderName: "sample",
+				ScopeName:       "otelcol",
+				ShortFolderName: ".",
 			},
 		},
 		{
