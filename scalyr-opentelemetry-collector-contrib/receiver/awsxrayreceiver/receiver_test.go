@@ -38,6 +38,28 @@ const (
 	mockRegion           = "us-west-2"
 )
 
+func TestConsumerCantBeNil(t *testing.T) {
+	addr, err := net.ResolveUDPAddr(udppoller.Transport, "localhost:0")
+	assert.NoError(t, err, "should resolve UDP address")
+
+	sock, err := net.ListenUDP(udppoller.Transport, addr)
+	assert.NoError(t, err, "should be able to listen")
+	defer sock.Close()
+	address := sock.LocalAddr().String()
+
+	_, err = newReceiver(
+		&Config{
+			NetAddr: confignet.NetAddr{
+				Endpoint:  address,
+				Transport: udppoller.Transport,
+			},
+		},
+		nil,
+		receivertest.NewNopCreateSettings(),
+	)
+	assert.True(t, errors.Is(err, component.ErrNilNextConsumer), "consumer is nil should be detected")
+}
+
 func TestProxyCreationFailed(t *testing.T) {
 	addr, err := findAvailableUDPAddress()
 	assert.NoError(t, err, "there should be address available")
@@ -45,12 +67,12 @@ func TestProxyCreationFailed(t *testing.T) {
 	sink := new(consumertest.TracesSink)
 	_, err = newReceiver(
 		&Config{
-			AddrConfig: confignet.AddrConfig{
+			NetAddr: confignet.NetAddr{
 				Endpoint:  addr,
 				Transport: udppoller.Transport,
 			},
 			ProxyServer: &proxy.Config{
-				TCPAddrConfig: confignet.TCPAddrConfig{
+				TCPAddr: confignet.TCPAddr{
 					Endpoint: "invalidEndpoint",
 				},
 			},
@@ -65,7 +87,7 @@ func TestPollerCreationFailed(t *testing.T) {
 	sink := new(consumertest.TracesSink)
 	_, err := newReceiver(
 		&Config{
-			AddrConfig: confignet.AddrConfig{
+			NetAddr: confignet.NetAddr{
 				Endpoint:  "dontCare",
 				Transport: "tcp",
 			},
@@ -279,12 +301,12 @@ func createAndOptionallyStartReceiver(
 	set.Logger = logger
 	rcvr, err := newReceiver(
 		&Config{
-			AddrConfig: confignet.AddrConfig{
+			NetAddr: confignet.NetAddr{
 				Endpoint:  addr,
 				Transport: udppoller.Transport,
 			},
 			ProxyServer: &proxy.Config{
-				TCPAddrConfig: confignet.TCPAddrConfig{
+				TCPAddr: confignet.TCPAddr{
 					Endpoint: tcpAddr,
 				},
 			},

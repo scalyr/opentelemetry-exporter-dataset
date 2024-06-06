@@ -7,7 +7,3 @@ status:
   distributions: [contrib, splunk, observiq, sumo]
   codeowners:
     active: [dashpole]
-  unsupported_platforms: [darwin, linux]
-
-tests:
-  config:

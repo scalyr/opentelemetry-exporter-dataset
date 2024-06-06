@@ -7,7 +7,6 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [djaglowski, schmikei]
-    seeking_new: true
 
 resource_attributes:
   vcenter.cluster.name:
@@ -422,3 +421,6 @@ metrics:
     gauge:
       value_type: double
     attributes: []
+
+tests:
+  config:

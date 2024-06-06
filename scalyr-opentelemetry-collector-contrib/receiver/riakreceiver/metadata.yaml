@@ -7,7 +7,6 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [djaglowski, armstrmi]
-    seeking_new: true
 
 resource_attributes:
   riak.node.name:
@@ -81,3 +80,6 @@ metrics:
       value_type: int
     attributes: [operation]
     enabled: true
+
+tests:
+  config:

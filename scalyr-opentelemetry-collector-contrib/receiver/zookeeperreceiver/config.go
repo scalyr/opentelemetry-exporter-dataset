@@ -12,6 +12,6 @@ import (
 
 type Config struct {
 	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
-	confignet.TCPAddrConfig                 `mapstructure:",squash"`
+	confignet.TCPAddr                       `mapstructure:",squash"`
 	metadata.MetricsBuilderConfig           `mapstructure:",squash"`
 }

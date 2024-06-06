@@ -33,7 +33,7 @@ func TestLoadConfig(t *testing.T) {
 			expected: &Config{
 				Protocols: Protocols{
 					GRPC: &configgrpc.ServerConfig{
-						NetAddr: confignet.AddrConfig{
+						NetAddr: confignet.NetAddr{
 							Endpoint:  "0.0.0.0:3600",
 							Transport: "tcp",
 						},
@@ -49,7 +49,7 @@ func TestLoadConfig(t *testing.T) {
 			expected: &Config{
 				Protocols: Protocols{
 					GRPC: &configgrpc.ServerConfig{
-						NetAddr: confignet.AddrConfig{
+						NetAddr: confignet.NetAddr{
 							Endpoint:  "localhost:4600",
 							Transport: "tcp",
 						},

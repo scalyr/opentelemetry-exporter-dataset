@@ -113,5 +113,4 @@ func TestStart(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.NoError(t, o.Start(context.TODO(), componenttest.NewNopHost()))
-	assert.NoError(t, o.Shutdown(context.TODO()))
 }

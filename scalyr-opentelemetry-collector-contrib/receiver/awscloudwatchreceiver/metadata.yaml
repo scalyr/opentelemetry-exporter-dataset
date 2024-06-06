@@ -7,7 +7,6 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [djaglowski, schmikei]
-    seeking_new: true
 
 tests:
   config:

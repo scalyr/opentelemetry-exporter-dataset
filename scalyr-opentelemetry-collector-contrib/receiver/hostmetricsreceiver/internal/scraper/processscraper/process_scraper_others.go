@@ -24,10 +24,6 @@ func getProcessName(context.Context, processHandle, string) (string, error) {
 	return "", nil
 }
 
-func getProcessCgroup(ctx context.Context, proc processHandle) (string, error) {
-	return "", nil
-}
-
 func getProcessExecutable(context.Context, processHandle) (string, error) {
 	return "", nil
 }

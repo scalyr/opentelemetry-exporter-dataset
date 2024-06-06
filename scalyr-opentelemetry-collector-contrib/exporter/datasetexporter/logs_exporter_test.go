@@ -813,7 +813,6 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
 		Debug:      true,
 		BufferSettings: BufferSettings{
 			MaxLifetime:          2 * time.Second,
-			PurgeOlderThan:       10 * time.Second,
 			GroupBy:              []string{"attributes.container_id"},
 			RetryInitialInterval: time.Second,
 			RetryMaxInterval:     time.Minute,

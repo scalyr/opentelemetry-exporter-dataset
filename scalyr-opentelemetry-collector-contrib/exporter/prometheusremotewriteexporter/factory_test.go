@@ -86,7 +86,6 @@ func Test_createMetricsExporter(t *testing.T) {
 				return
 			}
 			assert.NoError(t, err)
-			assert.NoError(t, exp.Shutdown(context.Background()))
 		})
 	}
 }

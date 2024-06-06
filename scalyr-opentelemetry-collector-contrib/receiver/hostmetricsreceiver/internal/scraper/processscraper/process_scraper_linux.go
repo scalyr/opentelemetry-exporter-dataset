@@ -45,15 +45,6 @@ func getProcessExecutable(ctx context.Context, proc processHandle) (string, erro
 	return exe, nil
 }
 
-func getProcessCgroup(ctx context.Context, proc processHandle) (string, error) {
-	cgroup, err := proc.CgroupWithContext(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	return cgroup, nil
-}
-
 func getProcessCommand(ctx context.Context, proc processHandle) (*commandMetadata, error) {
 	cmdline, err := proc.CmdlineSliceWithContext(ctx)
 	if err != nil {

@@ -8,7 +8,6 @@ status:
   codeowners:
     active: [djaglowski, mcardy]
 
-# TODO: Update the receiver to pass the tests
 tests:
   config:
     auth:

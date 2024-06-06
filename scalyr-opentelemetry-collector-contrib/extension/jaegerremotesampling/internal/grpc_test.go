@@ -25,7 +25,7 @@ func TestMissingClientConfigManagerGRPC(t *testing.T) {
 func TestStartAndStopGRPC(t *testing.T) {
 	// prepare
 	srvSettings := configgrpc.ServerConfig{
-		NetAddr: confignet.AddrConfig{
+		NetAddr: confignet.NetAddr{
 			Endpoint:  "127.0.0.1:0",
 			Transport: "tcp",
 		},

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -40,6 +41,9 @@ func TestNewMetricsReceiver(t *testing.T) {
 		recordType string
 		wantErr    error
 	}{
+		"WithNilConsumer": {
+			wantErr: component.ErrNilNextConsumer,
+		},
 		"WithInvalidRecordType": {
 			consumer:   consumertest.NewNop(),
 			recordType: "test",

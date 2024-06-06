@@ -7,7 +7,3 @@ status:
   distributions: [contrib, splunk, observiq, sumo]
   codeowners:
     active: [rmfitzpatrick]
-
-tests:
-  config:
-    endpoint: myendpoint:12345

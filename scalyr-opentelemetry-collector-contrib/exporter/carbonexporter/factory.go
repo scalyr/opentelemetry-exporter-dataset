@@ -30,7 +30,7 @@ func NewFactory() exporter.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		TCPAddrConfig: confignet.TCPAddrConfig{
+		TCPAddr: confignet.TCPAddr{
 			Endpoint: defaultEndpoint,
 		},
 		MaxIdleConns:    100,

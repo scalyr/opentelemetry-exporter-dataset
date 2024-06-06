@@ -214,12 +214,12 @@ func TestLogsExporter(t *testing.T) {
 			defer server.Close()
 			cfg := &Config{
 				Metrics: MetricsConfig{
-					TCPAddrConfig: confignet.TCPAddrConfig{
+					TCPAddr: confignet.TCPAddr{
 						Endpoint: server.URL,
 					},
 				},
 				Logs: LogsConfig{
-					TCPAddrConfig: confignet.TCPAddrConfig{
+					TCPAddr: confignet.TCPAddr{
 						Endpoint: server.URL,
 					},
 				},

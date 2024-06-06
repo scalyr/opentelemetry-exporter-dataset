@@ -29,7 +29,7 @@ func createDefaultConfig() component.Config {
 	return &Config{
 		ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
 		Timeout:                   time.Minute,
-		Hosts: []confignet.AddrConfig{
+		Hosts: []confignet.NetAddr{
 			{
 				Endpoint: "localhost:27017",
 			},

@@ -7,7 +7,6 @@ status:
   distributions: [contrib, observiq, sumo]
   codeowners:
     active: [djaglowski]
-    seeking_new: true
 
 resource_attributes:
   server.state:

@@ -9,4 +9,5 @@ status:
     active: [jpkrohling, hickeyma]
 
 tests:
+  config:
   expect_consumer_error: true

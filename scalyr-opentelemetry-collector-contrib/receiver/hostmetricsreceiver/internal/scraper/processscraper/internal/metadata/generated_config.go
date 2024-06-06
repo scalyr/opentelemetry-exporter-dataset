@@ -105,7 +105,6 @@ func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
 
 // ResourceAttributesConfig provides config for hostmetricsreceiver/process resource attributes.
 type ResourceAttributesConfig struct {
-	ProcessCgroup         ResourceAttributeConfig `mapstructure:"process.cgroup"`
 	ProcessCommand        ResourceAttributeConfig `mapstructure:"process.command"`
 	ProcessCommandLine    ResourceAttributeConfig `mapstructure:"process.command_line"`
 	ProcessExecutableName ResourceAttributeConfig `mapstructure:"process.executable.name"`
@@ -117,9 +116,6 @@ type ResourceAttributesConfig struct {
 
 func DefaultResourceAttributesConfig() ResourceAttributesConfig {
 	return ResourceAttributesConfig{
-		ProcessCgroup: ResourceAttributeConfig{
-			Enabled: false,
-		},
 		ProcessCommand: ResourceAttributeConfig{
 			Enabled: true,
 		},

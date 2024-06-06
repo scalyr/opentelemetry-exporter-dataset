@@ -49,7 +49,7 @@ func TestNewExporter(t *testing.T) {
 			Key: "ddog_32_characters_long_api_key1",
 		},
 		Metrics: MetricsConfig{
-			TCPAddrConfig: confignet.TCPAddrConfig{
+			TCPAddr: confignet.TCPAddr{
 				Endpoint: server.URL,
 			},
 			DeltaTTL: 3600,
@@ -389,7 +389,7 @@ func TestNewExporter_Zorkian(t *testing.T) {
 			Key: "ddog_32_characters_long_api_key1",
 		},
 		Metrics: MetricsConfig{
-			TCPAddrConfig: confignet.TCPAddrConfig{
+			TCPAddr: confignet.TCPAddr{
 				Endpoint: server.URL,
 			},
 			DeltaTTL: 3600,
@@ -859,7 +859,7 @@ func newTestConfig(t *testing.T, endpoint string, hostTags []string, histogramMo
 			Tags: hostTags,
 		},
 		Metrics: MetricsConfig{
-			TCPAddrConfig: confignet.TCPAddrConfig{
+			TCPAddr: confignet.TCPAddr{
 				Endpoint: endpoint,
 			},
 			HistConfig: HistogramConfig{

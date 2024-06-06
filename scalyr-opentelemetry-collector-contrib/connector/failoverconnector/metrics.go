@@ -21,6 +21,8 @@ type metricsFailover struct {
 	config   *Config
 	failover *failoverRouter[consumer.Metrics]
 	logger   *zap.Logger
+
+	done chan struct{}
 }
 
 func (f *metricsFailover) Capabilities() consumer.Capabilities {
@@ -60,17 +62,19 @@ func (f *metricsFailover) Shutdown(_ context.Context) error {
 	if f.failover != nil {
 		f.failover.Shutdown()
 	}
+	close(f.done)
 	return nil
 }
 
 func newMetricsToMetrics(set connector.CreateSettings, cfg component.Config, metrics consumer.Metrics) (connector.Metrics, error) {
 	config := cfg.(*Config)
 	mr, ok := metrics.(connector.MetricsRouterAndConsumer)
+	done := make(chan struct{})
 	if !ok {
 		return nil, errors.New("consumer is not of type MetricsRouter")
 	}
 
-	failover := newFailoverRouter[consumer.Metrics](mr.Consumer, config)
+	failover := newFailoverRouter[consumer.Metrics](mr.Consumer, config, done)
 	err := failover.registerConsumers()
 	if err != nil {
 		return nil, err
@@ -79,5 +83,6 @@ func newMetricsToMetrics(set connector.CreateSettings, cfg component.Config, met
 		config:   config,
 		failover: failover,
 		logger:   set.TelemetrySettings.Logger,
+		done:     done,
 	}, nil
 }

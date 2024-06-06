@@ -7,7 +7,6 @@ status:
   distributions: [contrib,observiq, sumo]
   codeowners:
     active: [djaglowski]
-    seeking_new: true
 
 resource_attributes:
   couchdb.node.name:
@@ -99,3 +98,5 @@ metrics:
       monotonic: true
       aggregation_temporality: cumulative
     attributes: [ operation ]
+tests:
+  config:
