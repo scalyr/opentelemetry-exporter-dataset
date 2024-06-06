@@ -1,6 +1,6 @@
 # TODO: We should eventually switch to the same multi stage + cross compilation build as in the other
 # Dockerfile since it means much faster build times and much smaller Docker image
-FROM --platform=$BUILDPLATFORM golang:1.20 as builder
+FROM --platform=$BUILDPLATFORM golang:1.21 as builder
 
 # Needed since otel relies on ca-certs.crt bundle for cert validation
 RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
