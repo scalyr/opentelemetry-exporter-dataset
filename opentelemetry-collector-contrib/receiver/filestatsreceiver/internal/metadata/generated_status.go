@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("filestats")
+)
+
 const (
-	Type             = "filestats"
-	MetricsStability = component.StabilityLevelAlpha
+	MetricsStability = component.StabilityLevelBeta
 )

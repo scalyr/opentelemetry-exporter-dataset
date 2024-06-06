@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("docker_stats")
+)
+
 const (
-	Type             = "docker_stats"
 	MetricsStability = component.StabilityLevelAlpha
 )

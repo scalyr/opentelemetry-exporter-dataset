@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("redis")
+)
+
 const (
-	Type             = "redis"
 	MetricsStability = component.StabilityLevelBeta
 )

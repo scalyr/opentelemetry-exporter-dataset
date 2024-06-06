@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("db_storage")
+)
+
 const (
-	Type               = "db_storage"
 	ExtensionStability = component.StabilityLevelAlpha
 )

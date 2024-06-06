@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("active_directory_ds")
+)
+
 const (
-	Type             = "active_directory_ds"
 	MetricsStability = component.StabilityLevelBeta
 )

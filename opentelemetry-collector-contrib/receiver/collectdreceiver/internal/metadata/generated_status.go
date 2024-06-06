@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("collectd")
+)
+
 const (
-	Type             = "collectd"
-	MetricsStability = component.StabilityLevelAlpha
+	MetricsStability = component.StabilityLevelBeta
 )

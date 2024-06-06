@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("tail_sampling")
+)
+
 const (
-	Type            = "tail_sampling"
 	TracesStability = component.StabilityLevelBeta
 )

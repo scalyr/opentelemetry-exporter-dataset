@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("cumulativetodelta")
+)
+
 const (
-	Type             = "cumulativetodelta"
 	MetricsStability = component.StabilityLevelBeta
 )

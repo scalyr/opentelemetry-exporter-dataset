@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("syslog")
+)
+
 const (
-	Type          = "syslog"
-	LogsStability = component.StabilityLevelDevelopment
+	LogsStability = component.StabilityLevelAlpha
 )

@@ -12,8 +12,8 @@ import (
 	pb "github.com/DataDog/datadog-agent/pkg/proto/pbgo/trace"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/obsreport"
 	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/receiver/receiverhelper"
 )
 
 type datadogReceiver struct {
@@ -22,15 +22,12 @@ type datadogReceiver struct {
 	params       receiver.CreateSettings
 	nextConsumer consumer.Traces
 	server       *http.Server
-	tReceiver    *obsreport.Receiver
+	tReceiver    *receiverhelper.ObsReport
 }
 
 func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, params receiver.CreateSettings) (receiver.Traces, error) {
-	if nextConsumer == nil {
-		return nil, component.ErrNilNextConsumer
-	}
 
-	instance, err := obsreport.NewReceiver(obsreport.ReceiverSettings{LongLivedCtx: false, ReceiverID: params.ID, Transport: "http", ReceiverCreateSettings: params})
+	instance, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{LongLivedCtx: false, ReceiverID: params.ID, Transport: "http", ReceiverCreateSettings: params})
 	if err != nil {
 		return nil, err
 	}
@@ -46,15 +43,17 @@ func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, params rec
 	}, nil
 }
 
-func (ddr *datadogReceiver) Start(_ context.Context, host component.Host) error {
+func (ddr *datadogReceiver) Start(ctx context.Context, host component.Host) error {
 	ddmux := http.NewServeMux()
 	ddmux.HandleFunc("/v0.3/traces", ddr.handleTraces)
 	ddmux.HandleFunc("/v0.4/traces", ddr.handleTraces)
 	ddmux.HandleFunc("/v0.5/traces", ddr.handleTraces)
 	ddmux.HandleFunc("/v0.7/traces", ddr.handleTraces)
+	ddmux.HandleFunc("/api/v0.2/traces", ddr.handleTraces)
 
 	var err error
-	ddr.server, err = ddr.config.HTTPServerSettings.ToServer(
+	ddr.server, err = ddr.config.ServerConfig.ToServer(
+		ctx,
 		host,
 		ddr.params.TelemetrySettings,
 		ddmux,
@@ -62,7 +61,7 @@ func (ddr *datadogReceiver) Start(_ context.Context, host component.Host) error 
 	if err != nil {
 		return fmt.Errorf("failed to create server definition: %w", err)
 	}
-	hln, err := ddr.config.HTTPServerSettings.ToListener()
+	hln, err := ddr.config.ServerConfig.ToListener(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create datadog listener: %w", err)
 	}
@@ -71,7 +70,7 @@ func (ddr *datadogReceiver) Start(_ context.Context, host component.Host) error 
 
 	go func() {
 		if err := ddr.server.Serve(hln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			host.ReportFatalError(fmt.Errorf("error starting datadog receiver: %w", err))
+			ddr.params.TelemetrySettings.ReportStatus(component.NewFatalErrorEvent(fmt.Errorf("error starting datadog receiver: %w", err)))
 		}
 	}()
 	return nil
@@ -88,22 +87,25 @@ func (ddr *datadogReceiver) handleTraces(w http.ResponseWriter, req *http.Reques
 	defer func(spanCount *int) {
 		ddr.tReceiver.EndTracesOp(obsCtx, "datadog", *spanCount, err)
 	}(&spanCount)
-	var ddTraces *pb.TracerPayload
 
+	var ddTraces []*pb.TracerPayload
 	ddTraces, err = handlePayload(req)
 	if err != nil {
 		http.Error(w, "Unable to unmarshal reqs", http.StatusBadRequest)
 		ddr.params.Logger.Error("Unable to unmarshal reqs")
 		return
 	}
-
-	otelTraces := toTraces(ddTraces, req)
-	spanCount = otelTraces.SpanCount()
-	err = ddr.nextConsumer.ConsumeTraces(obsCtx, otelTraces)
-	if err != nil {
-		http.Error(w, "Trace consumer errored out", http.StatusInternalServerError)
-		ddr.params.Logger.Error("Trace consumer errored out")
-	} else {
-		_, _ = w.Write([]byte("OK"))
+	for _, ddTrace := range ddTraces {
+		otelTraces := toTraces(ddTrace, req)
+		spanCount = otelTraces.SpanCount()
+		err = ddr.nextConsumer.ConsumeTraces(obsCtx, otelTraces)
+		if err != nil {
+			http.Error(w, "Trace consumer errored out", http.StatusInternalServerError)
+			ddr.params.Logger.Error("Trace consumer errored out")
+			return
+		}
 	}
+
+	_, _ = w.Write([]byte("OK"))
+
 }

@@ -6,8 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("logicmonitor")
+)
+
 const (
-	Type            = "logicmonitor"
 	TracesStability = component.StabilityLevelAlpha
 	LogsStability   = component.StabilityLevelAlpha
 )

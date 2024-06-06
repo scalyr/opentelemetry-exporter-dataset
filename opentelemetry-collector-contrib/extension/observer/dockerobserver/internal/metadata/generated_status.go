@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("docker_observer")
+)
+
 const (
-	Type               = "docker_observer"
 	ExtensionStability = component.StabilityLevelBeta
 )

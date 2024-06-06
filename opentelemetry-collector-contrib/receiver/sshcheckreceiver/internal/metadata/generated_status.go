@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("sshcheck")
+)
+
 const (
-	Type             = "sshcheck"
 	MetricsStability = component.StabilityLevelAlpha
 )

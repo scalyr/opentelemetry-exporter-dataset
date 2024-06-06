@@ -6,9 +6,12 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("routing")
+)
+
 const (
-	Type                      = "routing"
-	TracesToTracesStability   = component.StabilityLevelDevelopment
-	MetricsToMetricsStability = component.StabilityLevelDevelopment
-	LogsToLogsStability       = component.StabilityLevelDevelopment
+	TracesToTracesStability   = component.StabilityLevelAlpha
+	MetricsToMetricsStability = component.StabilityLevelAlpha
+	LogsToLogsStability       = component.StabilityLevelAlpha
 )
