@@ -33,6 +33,7 @@ func createDefaultConfig() component.Config {
 	return &Config{
 		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
 			CollectionInterval: defaultCollectionInterval,
+			Timeout:            defaultTimeout,
 		},
 		Endpoint:      defaultEndpoint,
 		Version:       defaultVersion,
@@ -60,7 +61,7 @@ func createMetricsReceiver(
 	}
 
 	snmpScraper := newScraper(params.Logger, snmpConfig, params)
-	scraper, err := scraperhelper.NewScraper(metadata.Type, snmpScraper.scrape, scraperhelper.WithStart(snmpScraper.start))
+	scraper, err := scraperhelper.NewScraper(metadata.Type.String(), snmpScraper.scrape, scraperhelper.WithStart(snmpScraper.start))
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func createMetricsReceiver(
 	return scraperhelper.NewScraperControllerReceiver(&snmpConfig.ScraperControllerSettings, params, consumer, scraperhelper.AddScraper(scraper))
 }
 
-// addMissingConfigDefaults adds any missing comfig parameters that have defaults
+// addMissingConfigDefaults adds any missing config parameters that have defaults
 func addMissingConfigDefaults(cfg *Config) error {
 	// Add the schema prefix to the endpoint if it doesn't contain one
 	if !strings.Contains(cfg.Endpoint, "://") {

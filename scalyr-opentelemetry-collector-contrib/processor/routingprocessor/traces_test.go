@@ -34,9 +34,9 @@ func TestTraces_RegisterExportersForValidRoute(t *testing.T) {
 	require.NoError(t, err)
 
 	otlpExpFactory := otlpexporter.NewFactory()
-	otlpID := component.NewID("otlp")
+	otlpID := component.MustNewID("otlp")
 	otlpConfig := &otlpexporter.Config{
-		GRPCClientSettings: configgrpc.GRPCClientSettings{
+		ClientConfig: configgrpc.ClientConfig{
 			Endpoint: "example.com:1234",
 		},
 	}
@@ -72,7 +72,7 @@ func TestTraces_InvalidExporter(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeTraces: {
-			component.NewID("otlp"): &mockComponent{},
+			component.MustNewID("otlp"): &mockComponent{},
 		},
 	})
 
@@ -89,8 +89,8 @@ func TestTraces_AreCorrectlySplitPerResourceAttributeRouting(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeTraces: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "2"): tExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "2"): tExp,
 		},
 	})
 
@@ -145,8 +145,8 @@ func TestTraces_RoutingWorks_Context(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeTraces: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "2"): tExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "2"): tExp,
 		},
 	})
 
@@ -238,8 +238,8 @@ func TestTraces_RoutingWorks_ResourceAttribute(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeTraces: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "2"): tExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "2"): tExp,
 		},
 	})
 
@@ -293,8 +293,8 @@ func TestTraces_RoutingWorks_ResourceAttribute_DropsRoutingAttribute(t *testing.
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeTraces: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "2"): tExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "2"): tExp,
 		},
 	})
 
@@ -340,9 +340,9 @@ func TestTracesAreCorrectlySplitPerResourceAttributeWithOTTL(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeTraces: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "1"): firstExp,
-			component.NewIDWithName("otlp", "2"): secondExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "1"): firstExp,
+			component.MustNewIDWithName("otlp", "2"): secondExp,
 		},
 	})
 
@@ -455,6 +455,48 @@ func TestTracesAreCorrectlySplitPerResourceAttributeWithOTTL(t *testing.T) {
 		assert.True(t, ok, "routing attribute must exists")
 		assert.Equal(t, attr.Int(), int64(-1))
 	})
+}
+
+// see https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/26462
+func TestTracesAttributeWithOTTLDoesNotCauseCrash(t *testing.T) {
+	// prepare
+	defaultExp := &mockTracesExporter{}
+	firstExp := &mockTracesExporter{}
+
+	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
+		component.DataTypeTraces: {
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "1"): firstExp,
+		},
+	})
+
+	exp, err := newTracesProcessor(noopTelemetrySettings, &Config{
+		DefaultExporters: []string{"otlp"},
+		Table: []RoutingTableItem{
+			{
+				Statement: `route() where attributes["value"] > 0`,
+				Exporters: []string{"otlp/1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	tr := ptrace.NewTraces()
+	rl := tr.ResourceSpans().AppendEmpty()
+	rl.Resource().Attributes().PutInt("value", 1)
+	span := rl.ScopeSpans().AppendEmpty().Spans().AppendEmpty()
+	span.SetName("span")
+
+	require.NoError(t, exp.Start(context.Background(), host))
+
+	// test
+	// before #26464, this would panic
+	require.NoError(t, exp.ConsumeTraces(context.Background(), tr))
+
+	// verify
+	assert.Len(t, defaultExp.AllTraces(), 1)
+	assert.Len(t, firstExp.AllTraces(), 0)
+
 }
 
 func TestTraceProcessorCapabilities(t *testing.T) {

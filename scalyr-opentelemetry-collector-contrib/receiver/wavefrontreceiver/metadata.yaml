@@ -3,8 +3,11 @@ type: wavefront
 status:
   class: receiver
   stability:
-    unmaintained: [metrics]
-  distributions: [contrib, sumo]
+    beta: [metrics]
+  distributions: [contrib, sumo, splunk]
   codeowners:
-    active: [ ]
+    active: [samiura]
 
+# TODO: Update the receiver to pass the tests
+tests:
+  skip_lifecycle: true

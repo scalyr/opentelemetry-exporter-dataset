@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -21,7 +22,9 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/config/configtls"
+	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/exporter/exportertest"
@@ -33,11 +36,11 @@ import (
 // Test_NewPRWExporter checks that a new exporter instance with non-nil fields is initialized
 func Test_NewPRWExporter(t *testing.T) {
 	cfg := &Config{
-		TimeoutSettings:    exporterhelper.TimeoutSettings{},
-		RetrySettings:      exporterhelper.RetrySettings{},
-		Namespace:          "",
-		ExternalLabels:     map[string]string{},
-		HTTPClientSettings: confighttp.HTTPClientSettings{Endpoint: ""},
+		TimeoutSettings: exporterhelper.TimeoutSettings{},
+		BackOffConfig:   configretry.BackOffConfig{},
+		Namespace:       "",
+		ExternalLabels:  map[string]string{},
+		ClientConfig:    confighttp.ClientConfig{Endpoint: ""},
 		TargetInfo: &TargetInfo{
 			Enabled: true,
 		},
@@ -104,7 +107,7 @@ func Test_NewPRWExporter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg.HTTPClientSettings.Endpoint = tt.endpoint
+			cfg.ClientConfig.Endpoint = tt.endpoint
 			cfg.ExternalLabels = tt.externalLabels
 			cfg.Namespace = tt.namespace
 			cfg.RemoteWriteQueue.NumConsumers = 1
@@ -129,10 +132,11 @@ func Test_NewPRWExporter(t *testing.T) {
 // Test_Start checks if the client is properly created as expected.
 func Test_Start(t *testing.T) {
 	cfg := &Config{
-		TimeoutSettings: exporterhelper.TimeoutSettings{},
-		RetrySettings:   exporterhelper.RetrySettings{},
-		Namespace:       "",
-		ExternalLabels:  map[string]string{},
+		TimeoutSettings:   exporterhelper.TimeoutSettings{},
+		BackOffConfig:     configretry.BackOffConfig{},
+		MaxBatchSizeBytes: 3000000,
+		Namespace:         "",
+		ExternalLabels:    map[string]string{},
 		TargetInfo: &TargetInfo{
 			Enabled: true,
 		},
@@ -155,7 +159,7 @@ func Test_Start(t *testing.T) {
 		returnErrorOnStartUp bool
 		set                  exporter.CreateSettings
 		endpoint             string
-		clientSettings       confighttp.HTTPClientSettings
+		clientSettings       confighttp.ClientConfig
 	}{
 		{
 			name:           "success_case",
@@ -164,7 +168,7 @@ func Test_Start(t *testing.T) {
 			concurrency:    5,
 			externalLabels: map[string]string{"Key1": "Val1"},
 			set:            set,
-			clientSettings: confighttp.HTTPClientSettings{Endpoint: "https://some.url:9411/api/prom/push"},
+			clientSettings: confighttp.ClientConfig{Endpoint: "https://some.url:9411/api/prom/push"},
 		},
 		{
 			name:                 "invalid_tls",
@@ -174,7 +178,7 @@ func Test_Start(t *testing.T) {
 			externalLabels:       map[string]string{"Key1": "Val1"},
 			set:                  set,
 			returnErrorOnStartUp: true,
-			clientSettings: confighttp.HTTPClientSettings{
+			clientSettings: confighttp.ClientConfig{
 				Endpoint: "https://some.url:9411/api/prom/push",
 				TLSSetting: configtls.TLSClientSetting{
 					TLSSetting: configtls.TLSSetting{
@@ -194,7 +198,7 @@ func Test_Start(t *testing.T) {
 			cfg.ExternalLabels = tt.externalLabels
 			cfg.Namespace = tt.namespace
 			cfg.RemoteWriteQueue.NumConsumers = 1
-			cfg.HTTPClientSettings = tt.clientSettings
+			cfg.ClientConfig = tt.clientSettings
 
 			prwe, err := newPRWExporter(cfg, tt.set)
 			assert.NoError(t, err)
@@ -340,8 +344,14 @@ func runExportPipeline(ts *prompb.TimeSeries, endpoint *url.URL) error {
 	}
 
 	cfg := createDefaultConfig().(*Config)
-	cfg.HTTPClientSettings.Endpoint = endpoint.String()
+	cfg.ClientConfig.Endpoint = endpoint.String()
 	cfg.RemoteWriteQueue.NumConsumers = 1
+	cfg.BackOffConfig = configretry.BackOffConfig{
+		Enabled:         true,
+		InitialInterval: 100 * time.Millisecond, // Shorter initial interval
+		MaxInterval:     1 * time.Second,        // Shorter max interval
+		MaxElapsedTime:  2 * time.Second,        // Shorter max elapsed time
+	}
 
 	buildInfo := component.BuildInfo{
 		Description: "OpenTelemetry Collector",
@@ -359,7 +369,7 @@ func runExportPipeline(ts *prompb.TimeSeries, endpoint *url.URL) error {
 		return err
 	}
 
-	return prwe.handleExport(context.Background(), testmap)
+	return prwe.handleExport(context.Background(), testmap, nil)
 }
 
 // Test_PushMetrics checks the number of TimeSeries received by server and the number of metrics dropped is the same as
@@ -667,21 +677,30 @@ func Test_PushMetrics(t *testing.T) {
 
 					defer server.Close()
 
+					// Adjusted retry settings for faster testing
+					retrySettings := configretry.BackOffConfig{
+						Enabled:         true,
+						InitialInterval: 100 * time.Millisecond, // Shorter initial interval
+						MaxInterval:     1 * time.Second,        // Shorter max interval
+						MaxElapsedTime:  2 * time.Second,        // Shorter max elapsed time
+					}
 					cfg := &Config{
 						Namespace: "",
-						HTTPClientSettings: confighttp.HTTPClientSettings{
+						ClientConfig: confighttp.ClientConfig{
 							Endpoint: server.URL,
 							// We almost read 0 bytes, so no need to tune ReadBufferSize.
 							ReadBufferSize:  0,
 							WriteBufferSize: 512 * 1024,
 						},
-						RemoteWriteQueue: RemoteWriteQueue{NumConsumers: 1},
+						MaxBatchSizeBytes: 3000000,
+						RemoteWriteQueue:  RemoteWriteQueue{NumConsumers: 1},
 						TargetInfo: &TargetInfo{
 							Enabled: true,
 						},
 						CreatedMetric: &CreatedMetric{
 							Enabled: true,
 						},
+						BackOffConfig: retrySettings,
 					}
 
 					if useWAL {
@@ -853,7 +872,7 @@ func TestWALOnExporterRoundTrip(t *testing.T) {
 	tempDir := t.TempDir()
 	cfg := &Config{
 		Namespace: "test_ns",
-		HTTPClientSettings: confighttp.HTTPClientSettings{
+		ClientConfig: confighttp.ClientConfig{
 			Endpoint: prweServer.URL,
 		},
 		RemoteWriteQueue: RemoteWriteQueue{NumConsumers: 1},
@@ -901,7 +920,7 @@ func TestWALOnExporterRoundTrip(t *testing.T) {
 		"timeseries1": ts1,
 		"timeseries2": ts2,
 	}
-	errs := prwe.handleExport(ctx, tsMap)
+	errs := prwe.handleExport(ctx, tsMap, nil)
 	assert.NoError(t, errs)
 	// Shutdown after we've written to the WAL. This ensures that our
 	// exported data in-flight will flushed flushed to the WAL before exiting.
@@ -977,4 +996,88 @@ func TestWALOnExporterRoundTrip(t *testing.T) {
 	// To ensure a deterministic ordering, sort the TimeSeries by Label Name.
 	assert.Equal(t, want, gotFromUpload)
 	assert.Equal(t, gotFromWAL, gotFromUpload)
+}
+
+func canceledContext() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	return ctx
+}
+
+func assertPermanentConsumerError(t assert.TestingT, err error, _ ...any) bool {
+	return assert.True(t, consumererror.IsPermanent(err), "error should be consumererror.Permanent")
+}
+
+func TestRetries(t *testing.T) {
+
+	tts := []struct {
+		name             string
+		serverErrorCount int // number of times server should return error
+		expectedAttempts int
+		httpStatus       int
+		assertError      assert.ErrorAssertionFunc
+		assertErrorType  assert.ErrorAssertionFunc
+		ctx              context.Context
+	}{
+		{
+			"test 5xx should retry",
+			3,
+			4,
+			http.StatusInternalServerError,
+			assert.NoError,
+			assert.NoError,
+			context.Background(),
+		},
+		{
+			"test 4xx should not retry",
+			4,
+			1,
+			http.StatusBadRequest,
+			assert.Error,
+			assertPermanentConsumerError,
+			context.Background(),
+		},
+		{
+			"test timeout context should not execute",
+			4,
+			0,
+			http.StatusInternalServerError,
+			assert.Error,
+			assertPermanentConsumerError,
+			canceledContext(),
+		},
+	}
+
+	for _, tt := range tts {
+		t.Run(tt.name, func(t *testing.T) {
+			totalAttempts := 0
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if totalAttempts < tt.serverErrorCount {
+					http.Error(w, http.StatusText(tt.httpStatus), tt.httpStatus)
+				} else {
+					w.WriteHeader(http.StatusOK)
+				}
+				totalAttempts++
+			},
+			))
+			defer mockServer.Close()
+
+			endpointURL, err := url.Parse(mockServer.URL)
+			require.NoError(t, err)
+
+			// Create the prwExporter
+			exporter := &prwExporter{
+				endpointURL: endpointURL,
+				client:      http.DefaultClient,
+				retrySettings: configretry.BackOffConfig{
+					Enabled: true,
+				},
+			}
+
+			err = exporter.execute(tt.ctx, &prompb.WriteRequest{})
+			tt.assertError(t, err)
+			tt.assertErrorType(t, err)
+			assert.Equal(t, tt.expectedAttempts, totalAttempts)
+		})
+	}
 }

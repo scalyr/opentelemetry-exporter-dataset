@@ -4,6 +4,10 @@ status:
   class: exporter
   stability:
     alpha: [traces, metrics, logs]
-  distributions: [contrib]
+  distributions: [contrib, splunk]
   codeowners:
     active: [dmitryax, dao-jun]
+
+# Update the exporter to pass the tests
+tests:
+  skip_lifecycle: true

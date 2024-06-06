@@ -41,8 +41,8 @@ func TestLogs_RoutingWorks_Context(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeLogs: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "2"): lExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "2"): lExp,
 		},
 	})
 
@@ -133,8 +133,8 @@ func TestLogs_RoutingWorks_ResourceAttribute(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeLogs: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "2"): lExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "2"): lExp,
 		},
 	})
 
@@ -188,8 +188,8 @@ func TestLogs_RoutingWorks_ResourceAttribute_DropsRoutingAttribute(t *testing.T)
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeLogs: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "2"): lExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "2"): lExp,
 		},
 	})
 
@@ -232,8 +232,8 @@ func TestLogs_AreCorrectlySplitPerResourceAttributeRouting(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeLogs: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "2"): lExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "2"): lExp,
 		},
 	})
 
@@ -286,9 +286,9 @@ func TestLogsAreCorrectlySplitPerResourceAttributeWithOTTL(t *testing.T) {
 
 	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
 		component.DataTypeLogs: {
-			component.NewID("otlp"):              defaultExp,
-			component.NewIDWithName("otlp", "1"): firstExp,
-			component.NewIDWithName("otlp", "2"): secondExp,
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "1"): firstExp,
+			component.MustNewIDWithName("otlp", "2"): secondExp,
 		},
 	})
 
@@ -398,6 +398,47 @@ func TestLogsAreCorrectlySplitPerResourceAttributeWithOTTL(t *testing.T) {
 		assert.True(t, ok, "routing attribute must exists")
 		assert.Equal(t, attr.AsString(), "something-else")
 	})
+}
+
+// see https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/26462
+func TestLogsAttributeWithOTTLDoesNotCauseCrash(t *testing.T) {
+	// prepare
+	defaultExp := &mockLogsExporter{}
+	firstExp := &mockLogsExporter{}
+
+	host := newMockHost(map[component.DataType]map[component.ID]component.Component{
+		component.DataTypeLogs: {
+			component.MustNewID("otlp"):              defaultExp,
+			component.MustNewIDWithName("otlp", "1"): firstExp,
+		},
+	})
+
+	exp, err := newLogProcessor(noopTelemetrySettings, &Config{
+		DefaultExporters: []string{"otlp"},
+		Table: []RoutingTableItem{
+			{
+				Statement: `route() where attributes["value"] > 0`,
+				Exporters: []string{"otlp/1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	l := plog.NewLogs()
+
+	rl := l.ResourceLogs().AppendEmpty()
+	rl.Resource().Attributes().PutInt("value", 1)
+	rl.ScopeLogs().AppendEmpty().LogRecords().AppendEmpty()
+
+	require.NoError(t, exp.Start(context.Background(), host))
+
+	// test
+	// before #26464, this would panic
+	require.NoError(t, exp.ConsumeLogs(context.Background(), l))
+
+	// verify
+	assert.Len(t, defaultExp.AllLogs(), 1)
+	assert.Len(t, firstExp.AllLogs(), 0)
 }
 
 type mockLogsExporter struct {

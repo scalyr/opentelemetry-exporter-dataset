@@ -7,6 +7,7 @@ status:
   distributions: [contrib, splunk, observiq, sumo]
   codeowners:
     active: [djaglowski, schmikei]
+    seeking_new: true
 
 resource_attributes:
   mongodb_atlas.org_name:
@@ -31,6 +32,14 @@ resource_attributes:
     type: string
   mongodb_atlas.cluster.name:
     description: Cluster Name
+    enabled: false
+    type: string
+  mongodb_atlas.region.name:
+    description: Region Name
+    enabled: false
+    type: string
+  mongodb_atlas.provider.name:
+    description: Provider Name
     enabled: false
     type: string
   mongodb_atlas.process.port:
@@ -720,3 +729,8 @@ metrics:
     attributes: [cpu_state]
     gauge:
       value_type: double
+
+tests:
+  config:
+    alerts:
+      enabled: true

@@ -15,7 +15,7 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(ms, confmap.WithErrorUnused())
+	err := parser.Unmarshal(ms)
 	if err != nil {
 		return err
 	}
@@ -87,10 +87,25 @@ func DefaultMetricsConfig() MetricsConfig {
 // ResourceAttributeConfig provides common config for a particular resource attribute.
 type ResourceAttributeConfig struct {
 	Enabled bool `mapstructure:"enabled"`
+
+	enabledSetByUser bool
+}
+
+func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
+	if parser == nil {
+		return nil
+	}
+	err := parser.Unmarshal(rac)
+	if err != nil {
+		return err
+	}
+	rac.enabledSetByUser = parser.IsSet("enabled")
+	return nil
 }
 
 // ResourceAttributesConfig provides config for hostmetricsreceiver/process resource attributes.
 type ResourceAttributesConfig struct {
+	ProcessCgroup         ResourceAttributeConfig `mapstructure:"process.cgroup"`
 	ProcessCommand        ResourceAttributeConfig `mapstructure:"process.command"`
 	ProcessCommandLine    ResourceAttributeConfig `mapstructure:"process.command_line"`
 	ProcessExecutableName ResourceAttributeConfig `mapstructure:"process.executable.name"`
@@ -102,6 +117,9 @@ type ResourceAttributesConfig struct {
 
 func DefaultResourceAttributesConfig() ResourceAttributesConfig {
 	return ResourceAttributesConfig{
+		ProcessCgroup: ResourceAttributeConfig{
+			Enabled: false,
+		},
 		ProcessCommand: ResourceAttributeConfig{
 			Enabled: true,
 		},

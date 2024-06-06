@@ -45,7 +45,7 @@ func newTracesProcessor(settings component.TelemetrySettings, config component.C
 
 	meter := settings.MeterProvider.Meter(scopeName + nameSep + "traces")
 	nonRoutedSpansCounter, err := meter.Int64Counter(
-		metadata.Type+metricSep+processorKey+metricSep+nonRoutedSpansKey,
+		metadata.Type.String()+metricSep+processorKey+metricSep+nonRoutedSpansKey,
 		metric.WithDescription("Number of spans that were not routed to some or all exporters."),
 	)
 	if err != nil {
@@ -106,8 +106,8 @@ func (p *tracesProcessor) route(ctx context.Context, t ptrace.Traces) error {
 	for i := 0; i < t.ResourceSpans().Len(); i++ {
 		rspans := t.ResourceSpans().At(i)
 		stx := ottlspan.NewTransformContext(
-			ptrace.Span{},
-			pcommon.InstrumentationScope{},
+			ptrace.NewSpan(),
+			pcommon.NewInstrumentationScope(),
 			rspans.Resource(),
 		)
 

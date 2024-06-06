@@ -4,6 +4,9 @@
 package redisreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/redisreceiver"
 
 import (
+	"fmt"
+	"net"
+
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/config/configtls"
@@ -16,7 +19,7 @@ type Config struct {
 	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
 	// TODO: Use one of the configs from core.
 	// The target endpoint.
-	confignet.NetAddr `mapstructure:",squash"`
+	confignet.AddrConfig `mapstructure:",squash"`
 
 	// TODO allow users to add additional resource key value pairs?
 
@@ -33,4 +36,18 @@ type Config struct {
 	TLS configtls.TLSClientSetting `mapstructure:"tls,omitempty"`
 
 	MetricsBuilderConfig metadata.MetricsBuilderConfig `mapstructure:",squash"`
+}
+
+// configInfo holds configuration information to be used as resource/metrics attributes.
+type configInfo struct {
+	Address string
+	Port    string
+}
+
+func newConfigInfo(cfg *Config) (configInfo, error) {
+	address, port, err := net.SplitHostPort(cfg.Endpoint)
+	if err != nil {
+		return configInfo{}, fmt.Errorf("invalid endpoint %q: %w", cfg.Endpoint, err)
+	}
+	return configInfo{Address: address, Port: port}, nil
 }
