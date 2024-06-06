@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("windowsperfcounters")
+)
+
 const (
-	Type             = "windowsperfcounters"
 	MetricsStability = component.StabilityLevelBeta
 )

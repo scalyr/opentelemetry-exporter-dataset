@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/ptrace"
@@ -124,23 +125,9 @@ func (r *bulkRecorder) countItems() (count int) {
 }
 
 func newESTestServer(t *testing.T, bulkHandler bulkHandler) *httptest.Server {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/", handleErr(func(w http.ResponseWriter, req *http.Request) error {
-		w.Header().Add("X-Elastic-Product", "Elasticsearch")
-
-		enc := json.NewEncoder(w)
-		return enc.Encode(map[string]interface{}{
-			"version": map[string]interface{}{
-				"number": currentESVersion,
-			},
-		})
-	}))
-
-	mux.HandleFunc("/_bulk", handleErr(func(w http.ResponseWriter, req *http.Request) error {
+	return newESTestServerBulkHandlerFunc(t, handleErr(func(w http.ResponseWriter, req *http.Request) error {
 		tsStart := time.Now()
 		var items []itemRequest
-		w.Header().Add("X-Elastic-Product", "Elasticsearch")
 
 		dec := json.NewDecoder(req.Body)
 		for dec.More() {
@@ -170,6 +157,24 @@ func newESTestServer(t *testing.T, bulkHandler bulkHandler) *httptest.Server {
 		enc := json.NewEncoder(w)
 		return enc.Encode(bulkResult{Took: took, Items: resp, HasErrors: itemsHasError(resp)})
 	}))
+}
+
+func newESTestServerBulkHandlerFunc(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleErr(func(w http.ResponseWriter, _ *http.Request) error {
+		w.Header().Add("X-Elastic-Product", "Elasticsearch")
+
+		enc := json.NewEncoder(w)
+		return enc.Encode(map[string]any{
+			"version": map[string]any{
+				"number": currentESVersion,
+			},
+		})
+	}))
+	mux.HandleFunc("/_bulk", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("X-Elastic-Product", "Elasticsearch")
+		handler.ServeHTTP(w, r)
+	})
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
@@ -250,4 +255,29 @@ func fillResourceAttributeMap(attrs pcommon.Map, mp map[string]string) {
 	for k, v := range mp {
 		attrs.PutStr(k, v)
 	}
+}
+
+func TestGetSuffixTime(t *testing.T) {
+	defaultCfg := createDefaultConfig().(*Config)
+	defaultCfg.LogstashFormat.Enabled = true
+	testTime := time.Date(2023, 12, 2, 10, 10, 10, 1, time.UTC)
+	index, err := generateIndexWithLogstashFormat(defaultCfg.LogsIndex, &defaultCfg.LogstashFormat, testTime)
+	assert.NoError(t, err)
+	assert.Equal(t, index, "logs-generic-default-2023.12.02")
+
+	defaultCfg.LogsIndex = "logstash"
+	defaultCfg.LogstashFormat.PrefixSeparator = "."
+	otelLogsIndex, err := generateIndexWithLogstashFormat(defaultCfg.LogsIndex, &defaultCfg.LogstashFormat, testTime)
+	assert.NoError(t, err)
+	assert.Equal(t, otelLogsIndex, "logstash.2023.12.02")
+
+	defaultCfg.LogstashFormat.DateFormat = "%Y-%m-%d"
+	newOtelLogsIndex, err := generateIndexWithLogstashFormat(defaultCfg.LogsIndex, &defaultCfg.LogstashFormat, testTime)
+	assert.NoError(t, err)
+	assert.Equal(t, newOtelLogsIndex, "logstash.2023-12-02")
+
+	defaultCfg.LogstashFormat.DateFormat = "%d/%m/%Y"
+	newOtelLogsIndexWithSpecDataFormat, err := generateIndexWithLogstashFormat(defaultCfg.LogsIndex, &defaultCfg.LogstashFormat, testTime)
+	assert.NoError(t, err)
+	assert.Equal(t, newOtelLogsIndexWithSpecDataFormat, "logstash.02/12/2023")
 }

@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	semconv "go.opentelemetry.io/collector/semconv/v1.22.0"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -33,16 +34,18 @@ type (
 const (
 	tagMetricType = "metric_type"
 
-	CounterType   MetricType = "c"
-	GaugeType     MetricType = "g"
-	HistogramType MetricType = "h"
-	TimingType    MetricType = "ms"
+	CounterType      MetricType = "c"
+	GaugeType        MetricType = "g"
+	HistogramType    MetricType = "h"
+	TimingType       MetricType = "ms"
+	DistributionType MetricType = "d"
 
-	CounterTypeName   TypeName = "counter"
-	GaugeTypeName     TypeName = "gauge"
-	HistogramTypeName TypeName = "histogram"
-	TimingTypeName    TypeName = "timing"
-	TimingAltTypeName TypeName = "timer"
+	CounterTypeName      TypeName = "counter"
+	GaugeTypeName        TypeName = "gauge"
+	HistogramTypeName    TypeName = "histogram"
+	TimingTypeName       TypeName = "timing"
+	TimingAltTypeName    TypeName = "timer"
+	DistributionTypeName TypeName = "distribution"
 
 	GaugeObserver     ObserverType = "gauge"
 	SummaryObserver   ObserverType = "summary"
@@ -77,6 +80,7 @@ var defaultObserverCategory = ObserverCategory{
 type StatsDParser struct {
 	instrumentsByAddress map[netAddr]*instruments
 	enableMetricType     bool
+	enableSimpleTags     bool
 	isMonotonicCounter   bool
 	timerEvents          ObserverCategory
 	histogramEvents      ObserverCategory
@@ -125,6 +129,7 @@ type statsDMetric struct {
 	addition    bool
 	unit        string
 	sampleRate  float64
+	timestamp   uint64
 }
 
 type statsDMetricDescription struct {
@@ -143,6 +148,8 @@ func (t MetricType) FullName() TypeName {
 		return TimingTypeName
 	case HistogramType:
 		return HistogramTypeName
+	case DistributionType:
+		return DistributionTypeName
 	}
 	return TypeName(fmt.Sprintf("unknown(%s)", t))
 }
@@ -152,17 +159,18 @@ func (p *StatsDParser) resetState(when time.Time) {
 	p.instrumentsByAddress = make(map[netAddr]*instruments)
 }
 
-func (p *StatsDParser) Initialize(enableMetricType bool, isMonotonicCounter bool, sendTimerHistogram []TimerHistogramMapping) error {
+func (p *StatsDParser) Initialize(enableMetricType bool, enableSimpleTags bool, isMonotonicCounter bool, sendTimerHistogram []TimerHistogramMapping) error {
 	p.resetState(timeNowFunc())
 
 	p.histogramEvents = defaultObserverCategory
 	p.timerEvents = defaultObserverCategory
 	p.enableMetricType = enableMetricType
+	p.enableSimpleTags = enableSimpleTags
 	p.isMonotonicCounter = isMonotonicCounter
 	// Note: validation occurs in ("../".Config).validate()
 	for _, eachMap := range sendTimerHistogram {
 		switch eachMap.StatsdType {
-		case HistogramTypeName:
+		case HistogramTypeName, DistributionTypeName:
 			p.histogramEvents.method = eachMap.ObserverType
 			p.histogramEvents.histogramConfig = expoHistogramConfig(eachMap.Histogram)
 		case TimingTypeName, TimingAltTypeName:
@@ -255,7 +263,7 @@ var timeNowFunc = time.Now
 
 func (p *StatsDParser) observerCategoryFor(t MetricType) ObserverCategory {
 	switch t {
-	case HistogramType:
+	case HistogramType, DistributionType:
 		return p.histogramEvents
 	case TimingType:
 		return p.timerEvents
@@ -266,7 +274,7 @@ func (p *StatsDParser) observerCategoryFor(t MetricType) ObserverCategory {
 
 // Aggregate for each metric line.
 func (p *StatsDParser) Aggregate(line string, addr net.Addr) error {
-	parsedMetric, err := parseMessageToMetric(line, p.enableMetricType)
+	parsedMetric, err := parseMessageToMetric(line, p.enableMetricType, p.enableSimpleTags)
 	if err != nil {
 		return err
 	}
@@ -301,7 +309,7 @@ func (p *StatsDParser) Aggregate(line string, addr net.Addr) error {
 			point.SetIntValue(point.IntValue() + parsedMetric.counterValue())
 		}
 
-	case TimingType, HistogramType:
+	case TimingType, HistogramType, DistributionType:
 		category := p.observerCategoryFor(parsedMetric.description.metricType)
 		switch category.method {
 		case GaugeObserver:
@@ -345,7 +353,7 @@ func (p *StatsDParser) Aggregate(line string, addr net.Addr) error {
 	return nil
 }
 
-func parseMessageToMetric(line string, enableMetricType bool) (statsDMetric, error) {
+func parseMessageToMetric(line string, enableMetricType bool, enableSimpleTags bool) (statsDMetric, error) {
 	result := statsDMetric{}
 
 	parts := strings.Split(line, "|")
@@ -372,7 +380,7 @@ func parseMessageToMetric(line string, enableMetricType bool) (statsDMetric, err
 
 	inType := MetricType(parts[1])
 	switch inType {
-	case CounterType, GaugeType, HistogramType, TimingType:
+	case CounterType, GaugeType, HistogramType, TimingType, DistributionType:
 		result.description.metricType = inType
 	default:
 		return result, fmt.Errorf("unsupported metric type: %s", inType)
@@ -396,17 +404,56 @@ func parseMessageToMetric(line string, enableMetricType bool) (statsDMetric, err
 		case strings.HasPrefix(part, "#"):
 			tagsStr := strings.TrimPrefix(part, "#")
 
+			// handle an empty tag set
+			// where the tags part was still sent (some clients do this)
+			if len(tagsStr) == 0 {
+				continue
+			}
+
 			tagSets := strings.Split(tagsStr, ",")
 
 			for _, tagSet := range tagSets {
 				tagParts := strings.SplitN(tagSet, ":", 2)
-				if len(tagParts) != 2 {
-					return result, fmt.Errorf("invalid tag format: %s", tagParts)
-				}
 				k := tagParts[0]
-				v := tagParts[1]
+				if k == "" {
+					return result, fmt.Errorf("invalid tag format: %q", tagSet)
+				}
+
+				// support both simple tags (w/o value) and dimension tags (w/ value).
+				// dogstatsd notably allows simple tags.
+				var v string
+				if len(tagParts) == 2 {
+					v = tagParts[1]
+				}
+
+				if v == "" && !enableSimpleTags {
+					return result, fmt.Errorf("invalid tag format: %q", tagSet)
+				}
+
 				kvs = append(kvs, attribute.String(k, v))
 			}
+		case strings.HasPrefix(part, "c:"):
+			// As per DogStatD protocol v1.2:
+			// https://docs.datadoghq.com/developers/dogstatsd/datagram_shell/?tab=metrics#dogstatsd-protocol-v12
+			containerID := strings.TrimPrefix(part, "c:")
+
+			if containerID != "" {
+				kvs = append(kvs, attribute.String(semconv.AttributeContainerID, containerID))
+			}
+		case strings.HasPrefix(part, "T"):
+			// As per DogStatD protocol v1.3:
+			// https://docs.datadoghq.com/developers/dogstatsd/datagram_shell/?tab=metrics#dogstatsd-protocol-v13
+			if inType != CounterType && inType != GaugeType {
+				return result, fmt.Errorf("only GAUGE and COUNT metrics support a timestamp")
+			}
+
+			timestampStr := strings.TrimPrefix(part, "T")
+			timestampSeconds, err := strconv.ParseUint(timestampStr, 10, 64)
+			if err != nil {
+				return result, fmt.Errorf("invalid timestamp: %s", timestampStr)
+			}
+
+			result.timestamp = timestampSeconds * 1e9 // Convert seconds to nanoseconds
 		default:
 			return result, fmt.Errorf("unrecognized message part: %s", part)
 		}

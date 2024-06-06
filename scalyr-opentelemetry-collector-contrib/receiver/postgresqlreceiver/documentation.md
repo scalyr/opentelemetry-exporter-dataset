@@ -253,6 +253,22 @@ metrics:
     enabled: true
 ```
 
+### postgresql.database.locks
+
+The number of database locks.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| {lock} | Gauge | Int |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| relation | OID of the relation targeted by the lock, or null if the target is not a relation or part of a relation. | Any Str |
+| mode | Name of the lock mode held or desired by the process. | Any Str |
+| lock_type | Type of the lockable object. | Any Str |
+
 ### postgresql.deadlocks
 
 The number of deadlocks.
@@ -260,6 +276,14 @@ The number of deadlocks.
 | Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
 | ---- | ----------- | ---------- | ----------------------- | --------- |
 | {deadlock} | Sum | Int | Cumulative | true |
+
+### postgresql.sequential_scans
+
+The number of sequential scans.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| {sequential_scan} | Sum | Int | Cumulative | true |
 
 ### postgresql.temp_files
 
@@ -269,10 +293,29 @@ The number of temp files.
 | ---- | ----------- | ---------- | ----------------------- | --------- |
 | {temp_file} | Sum | Int | Cumulative | true |
 
+### postgresql.wal.delay
+
+Time between flushing recent WAL locally and receiving notification that the standby server has completed an operation with it.
+
+This metric requires WAL to be enabled with at least one replica.
+
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| s | Gauge | Double |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| operation | The operation which is responsible for the lag. | Str: ``flush``, ``replay``, ``write`` |
+| replication_client | The IP address of the client connected to this backend. If this field is "unix", it indicates either that the client is connected via a Unix socket. | Any Str |
+
 ## Resource Attributes
 
 | Name | Description | Values | Enabled |
 | ---- | ----------- | ------ | ------- |
 | postgresql.database.name | The name of the database. | Any Str | true |
 | postgresql.index.name | The name of the index on a table. | Any Str | true |
-| postgresql.table.name | The schema name followed by the table name. | Any Str | true |
+| postgresql.schema.name | The schema name. | Any Str | true |
+| postgresql.table.name | The table name. | Any Str | true |

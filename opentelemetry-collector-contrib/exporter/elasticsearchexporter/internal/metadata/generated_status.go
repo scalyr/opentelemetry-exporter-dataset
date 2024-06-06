@@ -6,8 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("elasticsearch")
+)
+
 const (
-	Type            = "elasticsearch"
 	TracesStability = component.StabilityLevelBeta
 	LogsStability   = component.StabilityLevelBeta
 )

@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("aerospike")
+)
+
 const (
-	Type             = "aerospike"
 	MetricsStability = component.StabilityLevelAlpha
 )

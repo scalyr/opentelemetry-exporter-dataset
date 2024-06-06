@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("oauth2client")
+)
+
 const (
-	Type               = "oauth2client"
 	ExtensionStability = component.StabilityLevelBeta
 )

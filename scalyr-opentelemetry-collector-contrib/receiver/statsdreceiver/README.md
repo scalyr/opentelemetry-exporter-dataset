@@ -33,12 +33,14 @@ The Following settings are optional:
 
 - `enable_metric_type: true`(default value is false): Enable the statsd receiver to be able to emit the metric type(gauge, counter, timer(in the future), histogram(in the future)) as a label.
 
+- `enable_simple_tags: true`(default value is false): Enable parsing tags that do not have a value, e.g. `#mykey` instead of `#mykey:myvalue`. DogStatsD supports such tagging.
+
 - `is_monotonic_counter` (default value is false): Set all counter-type metrics the statsd receiver received as monotonic.
 
 - `timer_histogram_mapping:`(default value is below): Specify what OTLP type to convert received timing/histogram data to.
 
 
-`"statsd_type"` specifies received Statsd data type. Possible values for this setting are `"timing"`, `"timer"` and `"histogram"`.
+`"statsd_type"` specifies received Statsd data type. Possible values for this setting are `"timing"`, `"timer"`, `"histogram"` and `"distribution"`.
 
 `"observer_type"` specifies OTLP data type to convert to. We support `"gauge"`, `"summary"`, and `"histogram"`. For `"gauge"`, it does not perform any aggregation.
 For `"summary`, the statsD receiver will aggregate to one OTLP summary metric for one metric description (the same metric name with the same tags). It will send percentile 0, 10, 50, 90, 95, 100 to the downstream.  The `"histogram"` setting selects an [auto-scaling exponential histogram configured with only a maximum size](https://github.com/lightstep/go-expohisto#readme), as shown in the example below.
@@ -61,6 +63,10 @@ receivers:
         observer_type: "histogram"
         histogram: 
           max_size: 100
+      - statsd_type: "distribution"
+        observer_type: "histogram"
+        histogram: 
+          max_size: 50    
 ```
 
 The full list of settings exposed for this receiver are documented [here](./config.go)
@@ -138,6 +144,10 @@ receivers:
         observer_type: "histogram"
         histogram:
           max_size: 50
+      - statsd_type: "distribution"
+        observer_type: "histogram"
+        histogram: 
+          max_size: 50    
       - statsd_type: "timing"
         observer_type: "summary"
 
@@ -156,4 +166,9 @@ service:
 
 A simple way to send a metric to `localhost:8125`:
 
-`echo "test.metric:42|c|#myKey:myVal" | nc -w 1 -u localhost 8125`
+```shell
+echo "test.metric:42|c|#myKey:myVal" | nc -w 1 -u -4 localhost 8125;
+echo "test.metric:42|c|#myKey:myVal" | nc -w 1 -u -6 localhost 8125;
+```
+
+Which sends a UDP packet using both IPV4 and IPV6, which is needed because the receiver's UDP server only accepts one or the other.

@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumertest"
-	"go.opentelemetry.io/collector/obsreport/obsreporttest"
+	"go.opentelemetry.io/collector/receiver"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,7 +29,7 @@ import (
 )
 
 func TestReceiver(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(component.NewID(metadata.Type))
+	tt, err := componenttest.SetupTelemetry(component.NewID(metadata.Type))
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, tt.Shutdown(context.Background()))
@@ -79,7 +79,7 @@ func TestReceiver(t *testing.T) {
 }
 
 func TestReceiverTimesOutAfterStartup(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(component.NewID(metadata.Type))
+	tt, err := componenttest.SetupTelemetry(component.NewID(metadata.Type))
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, tt.Shutdown(context.Background()))
@@ -100,7 +100,7 @@ func TestReceiverTimesOutAfterStartup(t *testing.T) {
 }
 
 func TestReceiverWithManyResources(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(component.NewID(metadata.Type))
+	tt, err := componenttest.SetupTelemetry(component.NewID(metadata.Type))
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, tt.Shutdown(context.Background()))
@@ -138,7 +138,7 @@ var consumeMetadataInvocation = func() {
 }
 
 func TestReceiverWithMetadata(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(component.NewID(metadata.Type))
+	tt, err := componenttest.SetupTelemetry(component.NewID(metadata.Type))
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, tt.Shutdown(context.Background()))
@@ -191,7 +191,7 @@ func TestReceiverWithMetadata(t *testing.T) {
 	require.NoError(t, r.Shutdown(ctx))
 }
 
-func getUpdatedPod(pod *corev1.Pod) interface{} {
+func getUpdatedPod(pod *corev1.Pod) any {
 	return &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      pod.Name,
@@ -210,7 +210,7 @@ func setupReceiver(
 	metricsConsumer consumer.Metrics,
 	logsConsumer consumer.Logs,
 	initialSyncTimeout time.Duration,
-	tt obsreporttest.TestTelemetry) *kubernetesReceiver {
+	tt componenttest.TestTelemetry) *kubernetesReceiver {
 
 	distribution := distributionKubernetes
 	if osQuotaClient != nil {
@@ -225,7 +225,7 @@ func setupReceiver(
 		MetricsBuilderConfig:       metadata.DefaultMetricsBuilderConfig(),
 	}
 
-	r, _ := newReceiver(context.Background(), tt.ToReceiverCreateSettings(), config)
+	r, _ := newReceiver(context.Background(), receiver.CreateSettings{ID: component.NewID(metadata.Type), TelemetrySettings: tt.TelemetrySettings(), BuildInfo: component.NewDefaultBuildInfo()}, config)
 	kr := r.(*kubernetesReceiver)
 	kr.metricsConsumer = metricsConsumer
 	kr.resourceWatcher.makeClient = func(_ k8sconfig.APIConfig) (kubernetes.Interface, error) {
@@ -273,12 +273,6 @@ func newFakeClientWithAllResources() *fake.Clientset {
 			GroupVersion: "autoscaling/v2",
 			APIResources: []v1.APIResource{
 				gvkToAPIResource(gvk.HorizontalPodAutoscaler),
-			},
-		},
-		{
-			GroupVersion: "autoscaling/v2beta2",
-			APIResources: []v1.APIResource{
-				gvkToAPIResource(gvk.HorizontalPodAutoscalerBeta),
 			},
 		},
 	}

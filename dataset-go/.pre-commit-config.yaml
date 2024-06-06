@@ -31,6 +31,7 @@ repos:
       - id: gofumpt
       - id: go-err-check
       - id: golangci-lint
+        args: [--config=.golangci.yml]
       - id: go-static-check
       # - id: go-ruleguard # requires https://github.com/quasilyte/go-ruleguard
       #    args: [rules/rules.go] # required

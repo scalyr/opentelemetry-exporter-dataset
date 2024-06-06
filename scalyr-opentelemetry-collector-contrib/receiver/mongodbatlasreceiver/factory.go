@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/exporter/exporterhelper"
-	rcvr "go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver/internal/metadata"
@@ -25,21 +25,21 @@ const (
 )
 
 // NewFactory creates a factory for MongoDB Atlas receiver
-func NewFactory() rcvr.Factory {
-	return rcvr.NewFactory(
+func NewFactory() receiver.Factory {
+	return receiver.NewFactory(
 		metadata.Type,
 		createDefaultConfig,
-		rcvr.WithMetrics(createMetricsReceiver, metadata.MetricsStability),
-		rcvr.WithLogs(createCombinedLogReceiver, metadata.LogsStability))
+		receiver.WithMetrics(createMetricsReceiver, metadata.MetricsStability),
+		receiver.WithLogs(createCombinedLogReceiver, metadata.LogsStability))
 
 }
 
 func createMetricsReceiver(
 	_ context.Context,
-	params rcvr.CreateSettings,
+	params receiver.CreateSettings,
 	rConf component.Config,
 	consumer consumer.Metrics,
-) (rcvr.Metrics, error) {
+) (receiver.Metrics, error) {
 	cfg := rConf.(*Config)
 	recv := newMongoDBAtlasReceiver(params, cfg)
 	ms, err := newMongoDBAtlasScraper(recv)
@@ -52,10 +52,10 @@ func createMetricsReceiver(
 
 func createCombinedLogReceiver(
 	_ context.Context,
-	params rcvr.CreateSettings,
+	params receiver.CreateSettings,
 	rConf component.Config,
 	consumer consumer.Logs,
-) (rcvr.Logs, error) {
+) (receiver.Logs, error) {
 	cfg := rConf.(*Config)
 
 	if !cfg.Alerts.Enabled && !cfg.Logs.Enabled && cfg.Events == nil {
@@ -97,7 +97,7 @@ func createDefaultConfig() component.Config {
 	c := &Config{
 		ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
 		Granularity:               defaultGranularity,
-		RetrySettings:             exporterhelper.NewDefaultRetrySettings(),
+		BackOffConfig:             configretry.NewDefaultBackOffConfig(),
 		MetricsBuilderConfig:      metadata.DefaultMetricsBuilderConfig(),
 		Alerts: AlertConfig{
 			Enabled:      defaultAlertsEnabled,

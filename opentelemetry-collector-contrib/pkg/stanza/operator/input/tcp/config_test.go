@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/collector/config/configtls"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/operatortest"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/tokenize"
 )
 
 func TestUnmarshal(t *testing.T) {
@@ -32,10 +31,9 @@ func TestUnmarshal(t *testing.T) {
 					cfg.ListenAddress = "10.0.0.1:9000"
 					cfg.AddAttributes = true
 					cfg.Encoding = "utf-8"
-					cfg.Multiline = tokenize.NewMultilineConfig()
-					cfg.Multiline.LineStartPattern = "ABC"
-					cfg.TLS = &configtls.TLSServerSetting{
-						TLSSetting: configtls.TLSSetting{
+					cfg.SplitConfig.LineStartPattern = "ABC"
+					cfg.TLS = &configtls.ServerConfig{
+						Config: configtls.Config{
 							CertFile: "foo",
 							KeyFile:  "foo2",
 							CAFile:   "foo3",

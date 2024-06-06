@@ -47,7 +47,7 @@ func TestNewClient(t *testing.T) {
 	t.Setenv("SCALYR_READCONFIG_TOKEN", "readconfig")
 	cfg, err := config.New(config.FromEnv())
 	assert.Nil(t, err)
-	sc4, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil)
+	sc4, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
 	assert.Equal(t, sc4.Config.Tokens.ReadLog, "readlog")
 	assert.Equal(t, sc4.Config.Tokens.WriteLog, "writelog")
@@ -67,14 +67,13 @@ func TestClientBuffer(t *testing.T) {
 		Tokens:             config.DataSetTokens{WriteLog: token},
 		BufferSettings:     buffer_config.NewDefaultDataSetBufferSettings(),
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
-	}, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
+	}, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
 
 	sessionInfo := add_events.SessionInfo{
-		ServerId:   "serverId",
-		ServerType: "testing",
+		"ServerId":   "serverId",
+		"ServerType": "testing",
 	}
-	sc.SessionInfo = &sessionInfo
 
 	event1 := &add_events.Event{
 		Thread: "TId",
@@ -86,7 +85,7 @@ func TestClientBuffer(t *testing.T) {
 		},
 	}
 
-	sc.newBufferForEvents("aaa")
+	sc.newBufferForEvents("aaa", &sessionInfo)
 	buffer1 := sc.getBuffer("aaa")
 	added, err := buffer1.AddBundle(&add_events.EventBundle{Event: event1})
 	assert.Nil(t, err)
@@ -199,7 +198,7 @@ func TestAddEventsEndpointUrlWithoutTrailingSlash(t *testing.T) {
 	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com")
 	cfg, err := config.New(config.FromEnv())
 	assert.Nil(t, err)
-	sc, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil)
+	sc, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
 	assert.Equal(t, sc.addEventsEndpointUrl, "https://app.scalyr.com/api/addEvents")
 }
@@ -208,7 +207,7 @@ func TestAddEventsEndpointUrlWithTrailingSlash(t *testing.T) {
 	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com/")
 	cfg2, err := config.New(config.FromEnv())
 	assert.Nil(t, err)
-	sc2, err := NewClient(cfg2, nil, zap.Must(zap.NewDevelopment()), nil)
+	sc2, err := NewClient(cfg2, nil, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
 	assert.Equal(t, sc2.addEventsEndpointUrl, "https://app.scalyr.com/api/addEvents")
 }
@@ -219,7 +218,7 @@ func TestUserAgent(t *testing.T) {
 	numCpu := fmt.Sprint(runtime.NumCPU())
 	cfg, err := config.New(config.FromEnv())
 	assert.Nil(t, err)
-	client, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), &libraryConsumerUserAgentSuffix)
+	client, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), &libraryConsumerUserAgentSuffix, nil)
 	clientId := client.Id.String()
 	require.Nil(t, err)
 	assert.Equal(t, client.userAgent, "dataset-go;"+version.Version+";"+version.ReleasedDate+";"+clientId+";"+runtime.GOOS+";"+runtime.GOARCH+";"+numCpu+";"+libraryConsumerUserAgentSuffix)
@@ -230,7 +229,7 @@ func TestUserAgentWithoutCollectorAttrs(t *testing.T) {
 	numCpu := fmt.Sprint(runtime.NumCPU())
 	cfg, err := config.New(config.FromEnv())
 	assert.Nil(t, err)
-	client, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil)
+	client, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil, nil)
 	clientId := client.Id.String()
 	require.Nil(t, err)
 	assert.Equal(t, client.userAgent, "dataset-go;"+version.Version+";"+version.ReleasedDate+";"+clientId+";"+runtime.GOOS+";"+runtime.GOARCH+";"+numCpu)

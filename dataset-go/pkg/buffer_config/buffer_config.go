@@ -33,10 +33,14 @@ const (
 	MinimalMultiplier           = 0.0
 	MinimalRandomizationFactor  = 0.0
 	MinimalRetryShutdownTimeout = 2 * MinimalMaxElapsedTime
+	// MinimalPurgeToLifetimeRatio is the minimal ratio between buffer lifetime (when it's sent to server)
+	// and when the whole session is destroyed.
+	MinimalPurgeToLifetimeRatio = 3
 )
 
 type DataSetBufferSettings struct {
 	MaxLifetime              time.Duration
+	PurgeOlderThan           time.Duration
 	MaxSize                  int
 	GroupBy                  []string
 	RetryRandomizationFactor float64
@@ -50,6 +54,7 @@ type DataSetBufferSettings struct {
 func NewDefaultDataSetBufferSettings() DataSetBufferSettings {
 	return DataSetBufferSettings{
 		MaxLifetime:              5 * time.Second,
+		PurgeOlderThan:           30 * time.Second,
 		MaxSize:                  LimitBufferSize,
 		GroupBy:                  []string{},
 		RetryInitialInterval:     5 * time.Second,
@@ -66,6 +71,13 @@ type DataSetBufferSettingsOption func(*DataSetBufferSettings) error
 func WithMaxLifetime(maxLifetime time.Duration) DataSetBufferSettingsOption {
 	return func(c *DataSetBufferSettings) error {
 		c.MaxLifetime = maxLifetime
+		return nil
+	}
+}
+
+func WithPurgeOlderThan(purgeOlderThan time.Duration) DataSetBufferSettingsOption {
+	return func(c *DataSetBufferSettings) error {
+		c.PurgeOlderThan = purgeOlderThan
 		return nil
 	}
 }
@@ -148,8 +160,9 @@ func (cfg *DataSetBufferSettings) WithOptions(opts ...DataSetBufferSettingsOptio
 
 func (cfg *DataSetBufferSettings) String() string {
 	return fmt.Sprintf(
-		"MaxLifetime: %s, MaxSize: %d, GroupBy: %s, RetryRandomizationFactor: %f, RetryMultiplier: %f, RetryInitialInterval: %s, RetryMaxInterval: %s, RetryMaxElapsedTime: %s, RetryShutdownTimeout: %s",
+		"MaxLifetime: %s, PurgeOlderThan: %s, MaxSize: %d, GroupBy: %s, RetryRandomizationFactor: %f, RetryMultiplier: %f, RetryInitialInterval: %s, RetryMaxInterval: %s, RetryMaxElapsedTime: %s, RetryShutdownTimeout: %s",
 		cfg.MaxLifetime,
+		cfg.PurgeOlderThan,
 		cfg.MaxSize,
 		cfg.GroupBy,
 		cfg.RetryRandomizationFactor,
@@ -162,6 +175,15 @@ func (cfg *DataSetBufferSettings) String() string {
 }
 
 func (cfg *DataSetBufferSettings) Validate() error {
+	if MinimalPurgeToLifetimeRatio*cfg.MaxLifetime > cfg.PurgeOlderThan {
+		return fmt.Errorf(
+			"MaxLifetime %d has to be at least %d times smaller than PurgeOlderThan %d",
+			cfg.MaxSize,
+			MinimalPurgeToLifetimeRatio,
+			cfg.PurgeOlderThan,
+		)
+	}
+
 	if cfg.MaxSize > LimitBufferSize {
 		return fmt.Errorf(
 			"MaxSize has value %d which is more than %d",
