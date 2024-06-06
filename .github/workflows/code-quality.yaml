@@ -123,9 +123,8 @@ jobs:
       - name: Upload coverage reports to Codecov
         if: ${{ github.event_name != 'schedule' }}
         uses: codecov/codecov-action@v4
-        env:
-          token: ${{ secrets.CODECOV_TOKEN }}
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./scalyr-opentelemetry-collector-contrib/exporter/datasetexporter/coverage.txt
           fail_ci_if_error: true
           verbose: true
