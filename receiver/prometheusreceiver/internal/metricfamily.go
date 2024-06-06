@@ -287,7 +287,7 @@ func (mf *metricFamily) addSeries(seriesRef uint64, metricName string, ls labels
 			mg.ts = t
 			mg.count = v
 			mg.hasCount = true
-		case strings.HasSuffix(metricName, metricSuffixCreated):
+		case metricName == mf.metadata.Metric+metricSuffixCreated:
 			mg.created = v
 		default:
 			boundary, err := getBoundary(mf.mtype, ls)
@@ -297,7 +297,7 @@ func (mf *metricFamily) addSeries(seriesRef uint64, metricName string, ls labels
 			mg.complexValue = append(mg.complexValue, &dataPoint{value: v, boundary: boundary})
 		}
 	case pmetric.MetricTypeSum:
-		if strings.HasSuffix(metricName, metricSuffixCreated) {
+		if metricName == mf.metadata.Metric+metricSuffixCreated {
 			mg.created = v
 		} else {
 			mg.value = v
@@ -322,7 +322,7 @@ func (mf *metricFamily) appendMetric(metrics pmetric.MetricSlice, trimSuffixes b
 	metric.SetDescription(mf.metadata.Help)
 	metric.SetUnit(prometheus.UnitWordToUCUM(mf.metadata.Unit))
 
-	pointCount := 0
+	var pointCount int
 
 	switch mf.mtype {
 	case pmetric.MetricTypeHistogram:

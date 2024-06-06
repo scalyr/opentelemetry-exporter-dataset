@@ -4,6 +4,9 @@ status:
   class: exporter
   stability:
     beta: [traces, metrics, logs]
-  distributions: [contrib, observiq]
+  distributions: [contrib, observiq, liatrio]
   codeowners:
     active: [jacobmarble]
+
+tests:
+  expect_consumer_error: true

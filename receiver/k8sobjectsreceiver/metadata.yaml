@@ -3,7 +3,11 @@ type: k8sobjects
 status:
   class: receiver
   stability:
-    alpha: [logs]
+    beta: [logs]
   distributions: [contrib, splunk, sumo]
   codeowners:
     active: [dmitryax, hvaghani221, TylerHelmuth]
+
+tests:
+  config:
+  skip_lifecycle: true
