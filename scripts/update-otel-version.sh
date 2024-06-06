@@ -69,11 +69,10 @@ function update() {
   fi
   echo "Updating file ${1}: from ${from} to ${to}"
   sed -i '' "s/${from}/${to}/g" "${1}"
-  git git --no-pager diff "${1}"
+  git --no-pager diff "${1}"
 }
 
 update "${ROOT_DIR}/Dockerfile" "${FROM_VERSION}" "${TO_VERSION}"
 update "${ROOT_DIR}/Dockerfile.contrib_datasetexporter_latest" "${FROM_VERSION}" "${TO_VERSION}"
 update "${ROOT_DIR}/otelcol-builder.datasetexporter-latest.yaml" "${FROM_VERSION}" "${TO_VERSION}"
 update "${ROOT_DIR}/otelcol-builder.yaml" "${FROM_VERSION}" "${TO_VERSION}"
-
