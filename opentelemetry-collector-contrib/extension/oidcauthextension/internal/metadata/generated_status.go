@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("oidc")
+)
+
 const (
-	Type               = "oidc"
 	ExtensionStability = component.StabilityLevelBeta
 )

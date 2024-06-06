@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
@@ -37,7 +38,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "override-config"),
 			expected: &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
+				ClientConfig: confighttp.ClientConfig{
 					Endpoint: "http://localhost:8080",
 					Timeout:  500 * time.Millisecond,
 					Headers:  map[string]configopaque.String{"User-Agent": "OpenTelemetry -> Influx"},
@@ -47,7 +48,7 @@ func TestLoadConfig(t *testing.T) {
 					NumConsumers: 3,
 					QueueSize:    10,
 				},
-				RetrySettings: exporterhelper.RetrySettings{
+				BackOffConfig: configretry.BackOffConfig{
 					Enabled:             true,
 					InitialInterval:     1 * time.Second,
 					MaxInterval:         3 * time.Second,
@@ -55,13 +56,14 @@ func TestLoadConfig(t *testing.T) {
 					RandomizationFactor: backoff.DefaultRandomizationFactor,
 					Multiplier:          backoff.DefaultMultiplier,
 				},
-				Org:             "my-org",
-				Bucket:          "my-bucket",
-				Token:           "my-token",
-				SpanDimensions:  []string{"service.name", "span.name"},
-				MetricsSchema:   "telegraf-prometheus-v1",
-				PayloadMaxLines: 72,
-				PayloadMaxBytes: 27,
+				Org:                 "my-org",
+				Bucket:              "my-bucket",
+				Token:               "my-token",
+				SpanDimensions:      []string{"service.name", "span.name"},
+				LogRecordDimensions: []string{"service.name"},
+				MetricsSchema:       "telegraf-prometheus-v1",
+				PayloadMaxLines:     72,
+				PayloadMaxBytes:     27,
 			},
 		},
 	}

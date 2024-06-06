@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("span")
+)
+
 const (
-	Type            = "span"
 	TracesStability = component.StabilityLevelAlpha
 )

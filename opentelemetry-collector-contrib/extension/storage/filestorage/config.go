@@ -17,6 +17,9 @@ type Config struct {
 	Timeout   time.Duration `mapstructure:"timeout,omitempty"`
 
 	Compaction *CompactionConfig `mapstructure:"compaction,omitempty"`
+
+	// FSync specifies that fsync should be called after each database write
+	FSync bool `mapstructure:"fsync,omitempty"`
 }
 
 // CompactionConfig defines configuration for optional file storage compaction.
@@ -42,6 +45,10 @@ type CompactionConfig struct {
 	MaxTransactionSize int64 `mapstructure:"max_transaction_size,omitempty"`
 	// CheckInterval specifies frequency of compaction check
 	CheckInterval time.Duration `mapstructure:"check_interval,omitempty"`
+	// CleanupOnStart specifies removal of temporary files is performed on start.
+	// It will remove all the files in the compaction directory starting with tempdb,
+	// temp files will be left if a previous run of the process is killed while compacting.
+	CleanupOnStart bool `mapstructure:"cleanup_on_start,omitempty"`
 }
 
 func (cfg *Config) Validate() error {

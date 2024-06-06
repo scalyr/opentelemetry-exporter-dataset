@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("mezmo")
+)
+
 const (
-	Type          = "mezmo"
 	LogsStability = component.StabilityLevelBeta
 )

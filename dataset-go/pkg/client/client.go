@@ -27,7 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scalyr/dataset-go/pkg/server_host_config"
+	"github.com/scalyr/dataset-go/pkg/meter_config"
 
 	"golang.org/x/exp/slices"
 
@@ -35,11 +35,13 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 
+	_ "net/http/pprof"
+
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/buffer"
 	"github.com/scalyr/dataset-go/pkg/config"
-
-	_ "net/http/pprof"
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+	"github.com/scalyr/dataset-go/pkg/statistics"
 
 	"github.com/cskr/pubsub"
 	"github.com/google/uuid"
@@ -47,8 +49,8 @@ import (
 )
 
 const (
-	HttpErrorCannotConnect   = 600
-	HttpErrorHasErrorMessage = 499
+	HttpErrorCannotConnect = 600
+	HttpErrorCannotProcess = 601
 )
 
 // isOkStatus returns true if status code is 200, false otherwise.
@@ -62,37 +64,29 @@ func isRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
+type Purge struct{}
+
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
-	Id          uuid.UUID
-	Config      *config.DataSetConfig
-	Client      *http.Client
-	SessionInfo *add_events.SessionInfo
+	Id     uuid.UUID
+	Config *config.DataSetConfig
+	Client *http.Client
 	// map of known Buffer //TODO introduce cleanup
-	buffers          map[string]*buffer.Buffer
-	buffersAllMutex  sync.Mutex
-	buffersEnqueued  atomic.Uint64
-	buffersProcessed atomic.Uint64
-	buffersDropped   atomic.Uint64
-	buffersBroken    atomic.Uint64
+	buffers         map[string]*buffer.Buffer
+	buffersAllMutex sync.Mutex
 	// Pub/Sub topics of Buffers based on its session
-	BufferPerSessionTopic *pubsub.PubSub
-	LastHttpStatus        atomic.Uint32
-	lastError             error
-	lastErrorTs           time.Time
-	lastErrorMu           sync.RWMutex
-	retryAfter            time.Time
-	retryAfterMu          sync.RWMutex
+	BufferPerSessionTopic      *pubsub.PubSub
+	bufferSubscriptionChannels map[string]chan interface{}
+	LastHttpStatus             atomic.Uint32
+	lastError                  error
+	lastErrorTs                time.Time
+	lastErrorMu                sync.RWMutex
+	retryAfter                 time.Time
+	retryAfterMu               sync.RWMutex
 	// indicates that client has been shut down and no further processing is possible
-	finished         atomic.Bool
-	Logger           *zap.Logger
-	eventsEnqueued   atomic.Uint64
-	eventsProcessed  atomic.Uint64
-	eventsDropped    atomic.Uint64
-	eventsBroken     atomic.Uint64
-	bytesAPISent     atomic.Uint64
-	bytesAPIAccepted atomic.Uint64
-	addEventsMutex   sync.Mutex
+	finished       atomic.Bool
+	Logger         *zap.Logger
+	addEventsMutex sync.Mutex
 	// Pub/Sub topics of EventBundles based on its key
 	eventBundlePerKeyTopic *pubsub.PubSub
 	// map of known Subscription channels of eventBundlePerKeyTopic
@@ -106,9 +100,16 @@ type DataSetClient struct {
 	addEventsEndpointUrl string
 	userAgent            string
 	serverHost           string
+	statistics           *statistics.Statistics
 }
 
-func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger, userAgentSuffix *string) (*DataSetClient, error) {
+func NewClient(
+	cfg *config.DataSetConfig,
+	client *http.Client,
+	logger *zap.Logger,
+	userAgentSuffix *string,
+	meterConfig *meter_config.MeterConfig,
+) (*DataSetClient, error) {
 	logger.Info(
 		"Using config: ",
 		zap.String("config", cfg.String()),
@@ -123,7 +124,11 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 
 	// update group by, so that logs from the same host
 	// belong to the same session
-	addServerHostIntoGroupBy(cfg)
+	adjustGroupByWithSpecialAttributes(cfg)
+	logger.Info(
+		"Adjusted config: ",
+		zap.String("config", cfg.String()),
+	)
 
 	serverHost, err := getServerHost(cfg.ServerHostSettings)
 	if err != nil {
@@ -155,31 +160,27 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	if userAgentSuffix != nil && *userAgentSuffix != "" {
 		userAgent = userAgent + ";" + *userAgentSuffix
 	}
+	logger.Info("Using User-Agent: ", zap.String("User-Agent", userAgent))
+
+	stats, err := statistics.NewStatistics(meterConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("it was not possible to create statistics: %w", err)
+	}
 
 	dataClient := &DataSetClient{
 		Id:                              id,
 		Config:                          cfg,
 		Client:                          client,
-		SessionInfo:                     &add_events.SessionInfo{},
 		buffers:                         make(map[string]*buffer.Buffer),
-		buffersEnqueued:                 atomic.Uint64{},
-		buffersProcessed:                atomic.Uint64{},
-		buffersDropped:                  atomic.Uint64{},
-		buffersBroken:                   atomic.Uint64{},
 		buffersAllMutex:                 sync.Mutex{},
 		BufferPerSessionTopic:           pubsub.New(0),
+		bufferSubscriptionChannels:      make(map[string]chan interface{}),
 		LastHttpStatus:                  atomic.Uint32{},
 		retryAfter:                      time.Now(),
 		retryAfterMu:                    sync.RWMutex{},
 		lastErrorMu:                     sync.RWMutex{},
 		Logger:                          logger,
 		finished:                        atomic.Bool{},
-		eventsEnqueued:                  atomic.Uint64{},
-		eventsProcessed:                 atomic.Uint64{},
-		eventsDropped:                   atomic.Uint64{},
-		eventsBroken:                    atomic.Uint64{},
-		bytesAPIAccepted:                atomic.Uint64{},
-		bytesAPISent:                    atomic.Uint64{},
 		addEventsMutex:                  sync.Mutex{},
 		eventBundlePerKeyTopic:          pubsub.New(0),
 		eventBundleSubscriptionChannels: make(map[string]chan interface{}),
@@ -188,18 +189,20 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		addEventsEndpointUrl:            addEventsEndpointUrl,
 		userAgent:                       userAgent,
 		serverHost:                      serverHost,
+		statistics:                      stats,
 	}
 
 	// run buffer sweeper if requested
-	if cfg.BufferSettings.MaxLifetime > 0 {
-		dataClient.Logger.Info("Buffer.MaxLifetime is positive => send buffers regularly",
+	if cfg.BufferSettings.MaxLifetime > 0 || cfg.BufferSettings.PurgeOlderThan > 0 {
+		dataClient.Logger.Info("Buffer sweeping is enabled",
 			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
+			zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
 		)
-		go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime)
+		go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime, cfg.BufferSettings.PurgeOlderThan)
 	} else {
-		dataClient.Logger.Warn(
-			"Buffer.MaxLifetime is not positive => do NOT send buffers regularly",
+		dataClient.Logger.Warn("Buffer sweeping is disabled",
 			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
+			zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
 		)
 	}
 
@@ -229,18 +232,22 @@ func getServerHost(settings server_host_config.DataSetServerHostSettings) (strin
 	return os.Hostname()
 }
 
-// addServerHostIntoGroupBy adds attributes that indicate from which machine
-// the logs are into the groupBy attribute, so that they are part of the same session
-func addServerHostIntoGroupBy(cfg *config.DataSetConfig) {
+// adjustGroupByWithSpecialAttributes adds attributes that have special meaning in the UI
+// serverHost and logfile are used in the drop-down, so they have to be part of the
+// SessionInfo.
+func adjustGroupByWithSpecialAttributes(cfg *config.DataSetConfig) {
 	groupBy := cfg.BufferSettings.GroupBy
-	if !slices.Contains(groupBy, add_events.AttrOrigServerHost) {
-		groupBy = append(groupBy, add_events.AttrOrigServerHost)
+	if !slices.Contains(groupBy, add_events.AttrLogFile) {
+		groupBy = append(groupBy, add_events.AttrLogFile)
 	}
+	if !slices.Contains(groupBy, add_events.AttrServerHost) {
+		groupBy = append(groupBy, add_events.AttrServerHost)
+	}
+
 	cfg.BufferSettings.GroupBy = groupBy
 }
 
-func (client *DataSetClient) getBuffer(key string) *buffer.Buffer {
-	session := fmt.Sprintf("%s-%s", client.Id, key)
+func (client *DataSetClient) getBuffer(session string) *buffer.Buffer {
 	client.buffersAllMutex.Lock()
 	defer client.buffersAllMutex.Unlock()
 	return client.buffers[session]
@@ -267,15 +274,18 @@ func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.Se
 
 func (client *DataSetClient) newBuffersSubscriberRoutine(session string) {
 	ch := client.BufferPerSessionTopic.Sub(session)
+	client.bufferSubscriptionChannels[session] = ch
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBufferForSession(session, ch)
 	})(session, ch)
 }
 
 func (client *DataSetClient) listenAndSendBufferForSession(session string, ch chan interface{}) {
-	client.Logger.Info("Listening to submit buffer",
+	client.Logger.Debug("Listening to submit buffer",
 		zap.String("session", session),
 	)
+
+	client.statistics.SessionsOpenedAdd(1)
 
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
@@ -285,17 +295,19 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				zap.String("session", session),
 				zap.Any("msg", msg),
 			)
-			client.buffersBroken.Add(1)
+			client.statistics.BuffersBrokenAdd(1)
 			client.lastAcceptedAt.Store(time.Now().UnixNano())
 			continue
 		}
-		client.Logger.Debug("Received Buffer from channel",
-			zap.String("session", session),
-			zap.Int("processedMsgCnt", processedMsgCnt),
-			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
-			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
-			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
-		)
+		if processedMsgCnt%100 == 0 {
+			client.Logger.Debug("Received message from channel",
+				zap.String("session", session),
+				zap.Int("processedMsgCnt", processedMsgCnt),
+				zap.Uint64("buffersEnqueued", client.statistics.BuffersEnqueued()),
+				zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
+				zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
+			)
+		}
 		buf, bufferReadSuccess := msg.(*buffer.Buffer)
 		if bufferReadSuccess {
 			// sleep until retry time
@@ -304,22 +316,32 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 			}
 			if !buf.HasEvents() {
 				client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
-				client.buffersProcessed.Add(1)
+				client.statistics.BuffersProcessedAdd(1)
 				continue
 			}
 			if client.sendBufferWithRetryPolicy(buf) {
-				client.buffersProcessed.Add(1)
+				client.statistics.BuffersProcessedAdd(1)
 			}
 		} else {
+			_, purgeReadSuccess := msg.(Purge)
+			if purgeReadSuccess {
+				break
+			}
+
 			client.Logger.Error(
 				"Cannot convert message to Buffer",
 				zap.String("session", session),
 				zap.Any("msg", msg),
 			)
-			client.buffersBroken.Add(1)
+			client.statistics.BuffersBrokenAdd(1)
 		}
 		client.lastAcceptedAt.Store(time.Now().UnixNano())
 	}
+
+	client.Logger.Debug("Stopping to listen to submit buffer",
+		zap.String("session", session),
+	)
+	client.statistics.SessionsClosedAdd(1)
 }
 
 // Sends buffer to DataSet. If not succeeds and try is possible (it retryable), try retry until possible (timeout)
@@ -344,13 +366,11 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 		if err != nil {
 			client.Logger.Error("unable to send addEvents buffers", zap.Error(err))
 			client.setLastErrorTimestamp(time.Now())
-			if !strings.Contains(err.Error(), "Unable to send request") {
-				lastHttpStatus = HttpErrorHasErrorMessage
-				client.LastHttpStatus.Store(lastHttpStatus)
-				client.onBufferDrop(buf, lastHttpStatus, err)
-				return false // exit loop (failed to send buffer)
+			if strings.Contains(err.Error(), errMsgUnableToSentRequest) {
+				lastHttpStatus = HttpErrorCannotConnect
+			} else {
+				lastHttpStatus = HttpErrorCannotProcess
 			}
-			lastHttpStatus = HttpErrorCannotConnect
 			client.LastHttpStatus.Store(lastHttpStatus)
 		}
 		zaps := make([]zap.Field, 0)
@@ -375,7 +395,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 
 		if isOkStatus(lastHttpStatus) {
 			// everything was fine, there is no need for retries
-			client.bytesAPIAccepted.Add(uint64(payloadLen))
+			client.statistics.BytesAPIAcceptedAdd(uint64(payloadLen))
 			return true // exit loop (buffer sent)
 		}
 
@@ -422,7 +442,7 @@ func (client *DataSetClient) statisticsSweeper() {
 }
 
 // Statistics returns statistics about events, buffers processing from the start time
-func (client *DataSetClient) Statistics() *Statistics {
+func (client *DataSetClient) Statistics() *statistics.ExportedStatistics {
 	// for how long are events being processed
 	firstAt := time.Unix(0, client.firstReceivedAt.Load())
 	lastAt := time.Unix(0, client.lastAcceptedAt.Load())
@@ -434,49 +454,7 @@ func (client *DataSetClient) Statistics() *Statistics {
 		return nil
 	}
 
-	// log buffer stats
-	bProcessed := client.buffersProcessed.Load()
-	bEnqueued := client.buffersEnqueued.Load()
-	bDropped := client.buffersDropped.Load()
-	bBroken := client.buffersBroken.Load()
-
-	buffersStats := QueueStats{
-		bEnqueued,
-		bProcessed,
-		bDropped,
-		bBroken,
-		processingDur,
-	}
-
-	// log events stats
-	eProcessed := client.eventsProcessed.Load()
-	eEnqueued := client.eventsEnqueued.Load()
-	eDropped := client.eventsDropped.Load()
-	eBroken := client.eventsBroken.Load()
-
-	eventsStats := QueueStats{
-		eEnqueued,
-		eProcessed,
-		eDropped,
-		eBroken,
-		processingDur,
-	}
-
-	// log transferred stats
-	bAPISent := client.bytesAPISent.Load()
-	bAPIAccepted := client.bytesAPIAccepted.Load()
-	transferStats := TransferStats{
-		bAPISent,
-		bAPIAccepted,
-		bProcessed,
-		processingDur,
-	}
-
-	return &Statistics{
-		Buffers:  buffersStats,
-		Events:   eventsStats,
-		Transfer: transferStats,
-	}
+	return client.statistics.Export(processingDur)
 }
 
 func (client *DataSetClient) logStatistics() {
@@ -526,12 +504,34 @@ func (client *DataSetClient) logStatistics() {
 		zap.Float64("processingS", t.ProcessingTime().Seconds()),
 		zap.Duration("processing", t.ProcessingTime()),
 	)
+
+	// log session stats
+	s := stats.Sessions
+	client.Logger.Info(
+		"Sessions Stats:",
+		zap.Uint64("sessionsOpened", s.SessionsOpened()),
+		zap.Uint64("sessionsClosed", s.SessionsClosed()),
+		zap.Uint64("sessionsActive", s.SessionsActive()),
+	)
 }
 
-func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
-	client.Logger.Info("Starting buffer sweeper with lifetime", zap.Duration("lifetime", lifetime))
+func (client *DataSetClient) bufferSweeper(
+	lifetime time.Duration,
+	purgeOlderThan time.Duration,
+) {
+	client.Logger.Info(
+		"Starting buffer sweeper",
+		zap.Duration("bufferLifetime", lifetime),
+		zap.Duration("purgeOlderThan", purgeOlderThan),
+	)
 	totalKept := atomic.Uint64{}
 	totalSwept := atomic.Uint64{}
+
+	sleepTime := lifetime
+	if sleepTime == 0 {
+		sleepTime = purgeOlderThan
+	}
+
 	for i := uint64(0); ; i++ {
 		// if everything was finished, there is no need to run buffer sweeper
 		//if client.finished.Load() {
@@ -540,12 +540,13 @@ func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
 		//}
 		kept := atomic.Uint64{}
 		swept := atomic.Uint64{}
-		client.Logger.Debug("Buffer sweeping started", zap.Uint64("sweepId", i))
+		client.Logger.Debug(
+			"Buffer sweeping started", zap.Uint64("sweepId", i))
 		buffers := client.getBuffers()
 		for _, buf := range buffers {
 			// publish buffers that are ready only
 			// if we are actively adding events into this buffer skip it for now
-			if buf.ShouldSendAge(lifetime) {
+			if lifetime > 0 && buf.ShouldSendAge(lifetime) {
 				if buf.HasStatus(buffer.Ready) {
 					client.publishBuffer(buf)
 					swept.Add(1)
@@ -558,6 +559,10 @@ func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
 			} else {
 				kept.Add(1)
 				totalKept.Add(1)
+
+				if buf.ShouldPurgeAge(purgeOlderThan) {
+					client.purgeBuffer(buf)
+				}
 			}
 		}
 
@@ -578,7 +583,7 @@ func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
 			zap.Uint64("totalCombined", totalKept.Load()+totalSwept.Load()),
 		)
 
-		time.Sleep(lifetime)
+		time.Sleep(sleepTime)
 	}
 }
 
@@ -586,7 +591,14 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	if buf.HasStatus(buffer.Publishing) {
 		// buffer is already publishing, this should not happen
 		// so lets skip it
-		client.Logger.Warn("Buffer is already beeing published", buf.ZapStats()...)
+		client.Logger.Warn("Buffer is already being published", buf.ZapStats()...)
+		return
+	}
+
+	if buf.HasStatus(buffer.Purging) {
+		// buffer is already purging, this should not happen
+		// so lets skip it
+		client.Logger.Warn("Buffer is already being purged", buf.ZapStats()...)
 		return
 	}
 
@@ -613,8 +625,35 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
 
 	// publish buffer so it can be sent
-	client.buffersEnqueued.Add(+1)
+	client.statistics.BuffersEnqueuedAdd(+1)
 	client.BufferPerSessionTopic.Pub(buf, buf.Session)
+}
+
+func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
+	if !buf.HasStatus(buffer.Ready) {
+		// buffer is not ready => skip
+		client.Logger.Warn("Buffer cannot be purged", buf.ZapStats()...)
+		return
+	}
+
+	// sent message to terminate go routines
+	client.BufferPerSessionTopic.Pub(Purge{}, buf.Session)
+	client.eventBundlePerKeyTopic.Pub(Purge{}, buf.Session)
+
+	client.buffersAllMutex.Lock()
+	buf.SetStatus(buffer.Purging)
+	client.BufferPerSessionTopic.Unsub(client.bufferSubscriptionChannels[buf.Session], buf.Session)
+	delete(client.bufferSubscriptionChannels, buf.Session)
+
+	delete(client.buffers, buf.Session)
+	client.buffersAllMutex.Unlock()
+
+	client.addEventsMutex.Lock()
+	client.eventBundlePerKeyTopic.Unsub(client.eventBundleSubscriptionChannels[buf.Session], buf.Session)
+	delete(client.eventBundleSubscriptionChannels, buf.Session)
+	client.addEventsMutex.Unlock()
+
+	client.Logger.Debug("purging buffer", buf.ZapStats()...)
 }
 
 // Exporter rejects handling of incoming batches if is in error state
@@ -709,7 +748,7 @@ func (client *DataSetClient) setRetryAfter(t time.Time) {
 }
 
 func (client *DataSetClient) onBufferDrop(buf *buffer.Buffer, status uint32, err error) {
-	client.buffersDropped.Add(1)
+	client.statistics.BuffersDroppedAdd(1)
 	client.Logger.Error("Dropping buffer",
 		buf.ZapStats(
 			zap.Uint32("httpStatus", status),

@@ -16,12 +16,6 @@
 
 package add_events
 
-import (
-	"crypto/md5"
-	"encoding/hex"
-	"fmt"
-)
-
 // EventBundle represents a single DataSet event wrapper structure (see https://app.scalyr.com/help/api#addEvents)
 // Event - Zero or more events (log messages) to upload.
 // Thread - Optional. Lets you create a readable name for each thread in Event.
@@ -31,25 +25,4 @@ type EventBundle struct {
 	Event  *Event
 	Thread *Thread
 	Log    *Log
-}
-
-func (bundle *EventBundle) Key(groupBy []string) string {
-	// construct key
-	key := ""
-	for _, k := range groupBy {
-		val, ok := bundle.Event.Attrs[k]
-		if ok {
-			key += fmt.Sprintf("%s:%s", k, val)
-		}
-	}
-
-	// use md5 to shorten the key
-	hash := md5.Sum([]byte(key))
-	bundleKey := hex.EncodeToString(hash[:])
-
-	// add the key as attribute
-	bundle.Event.Attrs[AttrBundleKey] = bundleKey
-
-	// return the key
-	return bundleKey
 }

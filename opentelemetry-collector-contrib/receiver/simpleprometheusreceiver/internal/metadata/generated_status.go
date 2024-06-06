@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("prometheus_simple")
+)
+
 const (
-	Type             = "prometheus_simple"
 	MetricsStability = component.StabilityLevelBeta
 )

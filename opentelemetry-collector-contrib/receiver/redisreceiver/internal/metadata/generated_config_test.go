@@ -9,7 +9,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
 
@@ -31,6 +30,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					RedisClientsMaxInputBuffer:             MetricConfig{Enabled: true},
 					RedisClientsMaxOutputBuffer:            MetricConfig{Enabled: true},
 					RedisCmdCalls:                          MetricConfig{Enabled: true},
+					RedisCmdLatency:                        MetricConfig{Enabled: true},
 					RedisCmdUsec:                           MetricConfig{Enabled: true},
 					RedisCommands:                          MetricConfig{Enabled: true},
 					RedisCommandsProcessed:                 MetricConfig{Enabled: true},
@@ -56,12 +56,15 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					RedisRdbChangesSinceLastSave:           MetricConfig{Enabled: true},
 					RedisReplicationBacklogFirstByteOffset: MetricConfig{Enabled: true},
 					RedisReplicationOffset:                 MetricConfig{Enabled: true},
+					RedisReplicationReplicaOffset:          MetricConfig{Enabled: true},
 					RedisRole:                              MetricConfig{Enabled: true},
 					RedisSlavesConnected:                   MetricConfig{Enabled: true},
 					RedisUptime:                            MetricConfig{Enabled: true},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
-					RedisVersion: ResourceAttributeConfig{Enabled: true},
+					RedisVersion:  ResourceAttributeConfig{Enabled: true},
+					ServerAddress: ResourceAttributeConfig{Enabled: true},
+					ServerPort:    ResourceAttributeConfig{Enabled: true},
 				},
 			},
 		},
@@ -74,6 +77,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					RedisClientsMaxInputBuffer:             MetricConfig{Enabled: false},
 					RedisClientsMaxOutputBuffer:            MetricConfig{Enabled: false},
 					RedisCmdCalls:                          MetricConfig{Enabled: false},
+					RedisCmdLatency:                        MetricConfig{Enabled: false},
 					RedisCmdUsec:                           MetricConfig{Enabled: false},
 					RedisCommands:                          MetricConfig{Enabled: false},
 					RedisCommandsProcessed:                 MetricConfig{Enabled: false},
@@ -99,12 +103,15 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					RedisRdbChangesSinceLastSave:           MetricConfig{Enabled: false},
 					RedisReplicationBacklogFirstByteOffset: MetricConfig{Enabled: false},
 					RedisReplicationOffset:                 MetricConfig{Enabled: false},
+					RedisReplicationReplicaOffset:          MetricConfig{Enabled: false},
 					RedisRole:                              MetricConfig{Enabled: false},
 					RedisSlavesConnected:                   MetricConfig{Enabled: false},
 					RedisUptime:                            MetricConfig{Enabled: false},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
-					RedisVersion: ResourceAttributeConfig{Enabled: false},
+					RedisVersion:  ResourceAttributeConfig{Enabled: false},
+					ServerAddress: ResourceAttributeConfig{Enabled: false},
+					ServerPort:    ResourceAttributeConfig{Enabled: false},
 				},
 			},
 		},
@@ -125,7 +132,7 @@ func loadMetricsBuilderConfig(t *testing.T, name string) MetricsBuilderConfig {
 	sub, err := cm.Sub(name)
 	require.NoError(t, err)
 	cfg := DefaultMetricsBuilderConfig()
-	require.NoError(t, component.UnmarshalConfig(sub, &cfg))
+	require.NoError(t, sub.Unmarshal(&cfg))
 	return cfg
 }
 
@@ -141,13 +148,17 @@ func TestResourceAttributesConfig(t *testing.T) {
 		{
 			name: "all_set",
 			want: ResourceAttributesConfig{
-				RedisVersion: ResourceAttributeConfig{Enabled: true},
+				RedisVersion:  ResourceAttributeConfig{Enabled: true},
+				ServerAddress: ResourceAttributeConfig{Enabled: true},
+				ServerPort:    ResourceAttributeConfig{Enabled: true},
 			},
 		},
 		{
 			name: "none_set",
 			want: ResourceAttributesConfig{
-				RedisVersion: ResourceAttributeConfig{Enabled: false},
+				RedisVersion:  ResourceAttributeConfig{Enabled: false},
+				ServerAddress: ResourceAttributeConfig{Enabled: false},
+				ServerPort:    ResourceAttributeConfig{Enabled: false},
 			},
 		},
 	}
@@ -169,6 +180,6 @@ func loadResourceAttributesConfig(t *testing.T, name string) ResourceAttributesC
 	sub, err = sub.Sub("resource_attributes")
 	require.NoError(t, err)
 	cfg := DefaultResourceAttributesConfig()
-	require.NoError(t, component.UnmarshalConfig(sub, &cfg))
+	require.NoError(t, sub.Unmarshal(&cfg))
 	return cfg
 }

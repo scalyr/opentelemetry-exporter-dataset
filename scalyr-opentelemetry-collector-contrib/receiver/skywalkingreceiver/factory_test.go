@@ -27,7 +27,7 @@ import (
 func TestTypeStr(t *testing.T) {
 	factory := NewFactory()
 
-	assert.Equal(t, "skywalking", string(factory.Type()))
+	assert.Equal(t, "skywalking", factory.Type().String())
 }
 
 func TestCreateDefaultConfig(t *testing.T) {
@@ -41,21 +41,23 @@ func TestCreateReceiver(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 	// have to enable at least one protocol for the skywalking receiver to be created
-	cfg.(*Config).Protocols.GRPC = &configgrpc.GRPCServerSettings{
+	cfg.(*Config).Protocols.GRPC = &configgrpc.ServerConfig{
 		NetAddr: confignet.NetAddr{
-			Endpoint:  defaultGRPCBindEndpoint,
+			Endpoint:  "0.0.0.0:11800",
 			Transport: "tcp",
 		},
 	}
 	traceSink := new(consumertest.TracesSink)
 	set := receivertest.NewNopCreateSettings()
 	tReceiver, err := factory.CreateTracesReceiver(context.Background(), set, cfg, traceSink)
-	assert.NoError(t, err, "receiver creation failed")
-	assert.NotNil(t, tReceiver, "receiver creation failed")
+	assert.NoError(t, err, "trace receiver creation failed")
+	assert.NotNil(t, tReceiver, "trace receiver creation failed")
 
-	mReceiver, err := factory.CreateMetricsReceiver(context.Background(), set, cfg, nil)
-	assert.Equal(t, err, component.ErrDataTypeIsNotSupported)
-	assert.Nil(t, mReceiver)
+	metricSink := new(consumertest.MetricsSink)
+	mReceiver, err := factory.CreateMetricsReceiver(context.Background(), set, cfg, metricSink)
+	assert.NoError(t, err, "metric receiver creation failed")
+	assert.NotNil(t, mReceiver, "metric receiver creation failed")
+
 }
 
 func TestCreateReceiverGeneralConfig(t *testing.T) {
@@ -71,21 +73,22 @@ func TestCreateReceiverGeneralConfig(t *testing.T) {
 	set := receivertest.NewNopCreateSettings()
 	traceSink := new(consumertest.TracesSink)
 	tReceiver, err := factory.CreateTracesReceiver(context.Background(), set, cfg, traceSink)
-	assert.NoError(t, err, "receiver creation failed")
-	assert.NotNil(t, tReceiver, "receiver creation failed")
+	assert.NoError(t, err, "trace receiver creation failed")
+	assert.NotNil(t, tReceiver, "trace receiver creation failed")
 
-	mReceiver, err := factory.CreateMetricsReceiver(context.Background(), set, cfg, nil)
-	assert.Equal(t, err, component.ErrDataTypeIsNotSupported)
-	assert.Nil(t, mReceiver)
+	metricSink := new(consumertest.MetricsSink)
+	mReceiver, err := factory.CreateMetricsReceiver(context.Background(), set, cfg, metricSink)
+	assert.NoError(t, err, "metric receiver creation failed")
+	assert.NotNil(t, mReceiver, "metric receiver creation failed")
 }
 
 func TestCreateDefaultGRPCEndpoint(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 
-	cfg.(*Config).Protocols.GRPC = &configgrpc.GRPCServerSettings{
+	cfg.(*Config).Protocols.GRPC = &configgrpc.ServerConfig{
 		NetAddr: confignet.NetAddr{
-			Endpoint:  defaultGRPCBindEndpoint,
+			Endpoint:  "0.0.0.0:11800",
 			Transport: "tcp",
 		},
 	}
@@ -101,9 +104,9 @@ func TestCreateTLSGPRCEndpoint(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 
-	cfg.(*Config).Protocols.GRPC = &configgrpc.GRPCServerSettings{
+	cfg.(*Config).Protocols.GRPC = &configgrpc.ServerConfig{
 		NetAddr: confignet.NetAddr{
-			Endpoint:  defaultGRPCBindEndpoint,
+			Endpoint:  "0.0.0.0:11800",
 			Transport: "tcp",
 		},
 		TLSSetting: &configtls.TLSServerSetting{
@@ -123,8 +126,8 @@ func TestCreateTLSHTTPEndpoint(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 
-	cfg.(*Config).Protocols.HTTP = &confighttp.HTTPServerSettings{
-		Endpoint: defaultHTTPBindEndpoint,
+	cfg.(*Config).Protocols.HTTP = &confighttp.ServerConfig{
+		Endpoint: "0.0.0.0:12800",
 		TLSSetting: &configtls.TLSServerSetting{
 			TLSSetting: configtls.TLSSetting{
 				CertFile: "./testdata/server.crt",
@@ -143,8 +146,8 @@ func TestCreateInvalidHTTPEndpoint(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 
-	cfg.(*Config).Protocols.HTTP = &confighttp.HTTPServerSettings{
-		Endpoint: defaultHTTPBindEndpoint,
+	cfg.(*Config).Protocols.HTTP = &confighttp.ServerConfig{
+		Endpoint: "0.0.0.0:12800",
 	}
 	set := receivertest.NewNopCreateSettings()
 	traceSink := new(consumertest.TracesSink)

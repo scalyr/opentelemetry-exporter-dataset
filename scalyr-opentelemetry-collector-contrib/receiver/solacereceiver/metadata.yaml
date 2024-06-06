@@ -4,6 +4,14 @@ status:
   class: receiver
   stability:
     beta: [traces]
-  distributions: [contrib, sumo]
+  distributions: [contrib, sumo, splunk]
   codeowners:
     active: [djaglowski, mcardy]
+
+tests:
+  config:
+    auth:
+      sasl_plain:
+        username: username
+        password: passwd
+  skip_lifecycle: true
