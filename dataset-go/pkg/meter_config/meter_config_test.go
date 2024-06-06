@@ -14,9 +14,19 @@
  * limitations under the License.
  */
 
-package version
+package meter_config
 
-const (
-	Version      = "0.18.0"
-	ReleasedDate = "2024-02-15"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel"
 )
+
+func TestNewMeterConfig(t *testing.T) {
+	meter := otel.Meter("AAA")
+	cfg := NewMeterConfig(&meter, "entity", "name")
+	assert.Equal(t, "entity", cfg.Entity())
+	assert.Equal(t, "name", cfg.Name())
+	assert.NotNil(t, cfg.Meter())
+}
