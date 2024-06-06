@@ -51,7 +51,8 @@ between brackets points to the previous points):
   * `I2.2` - subscriber 1 / publisher 2 - each session batcher reads individual EventBundles from its own (based on key) EventBundlePerKeyTopic and combines them into batches, batches are published into the corresponding BufferPerSessionTopic (`C2`). Note key defines session (client.id + key)
   * `I2.3` - publisher 2 - output batch is published even if it's not full after some time period
   * `I2.4` - subscriber 2 - each session sender reads individual Buffers (batched events) from the BufferPerSessionTopic and sends them into DataSet API server (`D1`)
-* `I3` - each session has its own go routine, which has its own thread (`I2.1`)
+* `I3` - each session has its own go routine (`I2.1`)
+* `I4` - each session has with it associated several entries in support data structures, it's not associated with any network connection
 
 ```mermaid
 graph TB

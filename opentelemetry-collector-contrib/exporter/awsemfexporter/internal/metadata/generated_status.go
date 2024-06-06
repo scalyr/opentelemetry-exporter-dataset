@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("awsemf")
+)
+
 const (
-	Type             = "awsemf"
 	MetricsStability = component.StabilityLevelBeta
 )

@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("haproxy")
+)
+
 const (
-	Type             = "haproxy"
-	MetricsStability = component.StabilityLevelAlpha
+	MetricsStability = component.StabilityLevelBeta
 )

@@ -25,6 +25,8 @@ import (
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
 
+const DebugModeDefault = false
+
 // DataSetTokens wrap DataSet access tokens
 type DataSetTokens struct {
 	WriteLog    string
@@ -49,6 +51,7 @@ type DataSetConfig struct {
 	Tokens             DataSetTokens
 	BufferSettings     buffer_config.DataSetBufferSettings
 	ServerHostSettings server_host_config.DataSetServerHostSettings
+	Debug              bool
 }
 
 func NewDefaultDataSetConfig() DataSetConfig {
@@ -57,6 +60,7 @@ func NewDefaultDataSetConfig() DataSetConfig {
 		Tokens:             DataSetTokens{},
 		BufferSettings:     buffer_config.NewDefaultDataSetBufferSettings(),
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
+		Debug:              DebugModeDefault,
 	}
 }
 
@@ -90,6 +94,13 @@ func WithServerHostSettings(serverHostSettings server_host_config.DataSetServerH
 	}
 }
 
+func WithDebug(debug bool) DataSetConfigOption {
+	return func(c *DataSetConfig) error {
+		c.Debug = debug
+		return nil
+	}
+}
+
 func FromEnv() DataSetConfigOption {
 	return func(c *DataSetConfig) error {
 		if c.Tokens.WriteLog == "" {
@@ -109,6 +120,7 @@ func FromEnv() DataSetConfigOption {
 		}
 		c.BufferSettings = buffer_config.NewDefaultDataSetBufferSettings()
 		c.ServerHostSettings = server_host_config.NewDefaultDataSetServerHostSettings()
+		c.Debug = DebugModeDefault
 		return nil
 	}
 }
@@ -135,11 +147,12 @@ func (cfg *DataSetConfig) WithOptions(opts ...DataSetConfigOption) (*DataSetConf
 
 func (cfg *DataSetConfig) String() string {
 	return fmt.Sprintf(
-		"Endpoint: %s, Tokens: (%s), BufferSettings: (%s), ServerHostSettings: (%s)",
+		"Endpoint: %s, Tokens: (%s), BufferSettings: (%s), ServerHostSettings: (%s), Debug: (%t)",
 		cfg.Endpoint,
 		cfg.Tokens.String(),
 		cfg.BufferSettings.String(),
 		cfg.ServerHostSettings.String(),
+		cfg.Debug,
 	)
 }
 

@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("tencentcloud_logservice")
+)
+
 const (
-	Type          = "tencentcloud_logservice"
 	LogsStability = component.StabilityLevelBeta
 )

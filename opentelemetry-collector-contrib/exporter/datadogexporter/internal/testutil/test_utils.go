@@ -5,6 +5,7 @@
 package testutil // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/testutil"
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"net/http/httptest"
 
 	pb "github.com/DataDog/datadog-agent/pkg/proto/pbgo/trace"
+	"github.com/DataDog/opentelemetry-mapping-go/pkg/inframetadata/payload"
 	"github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes/source"
 	"github.com/DataDog/sketches-go/ddsketch"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -31,21 +33,23 @@ var (
 
 type DatadogServer struct {
 	*httptest.Server
-	MetadataChan chan []byte
+	MetadataChan chan payload.HostMetadata
 }
 
 /* #nosec G101 -- This is a false positive, these are API endpoints rather than credentials */
 const (
-	ValidateAPIKeyEndpoint = "/api/v1/validate"
+	ValidateAPIKeyEndpoint = "/api/v1/validate" // nolint G101
 	MetricV1Endpoint       = "/api/v1/series"
 	MetricV2Endpoint       = "/api/v2/series"
 	SketchesMetricEndpoint = "/api/beta/sketches"
 	MetadataEndpoint       = "/intake"
+	TraceEndpoint          = "/api/v0.2/traces"
+	APMStatsEndpoint       = "/api/v0.2/stats"
 )
 
 // DatadogServerMock mocks a Datadog backend server
 func DatadogServerMock(overwriteHandlerFuncs ...OverwriteHandleFunc) *DatadogServer {
-	metadataChan := make(chan []byte)
+	metadataChan := make(chan payload.HostMetadata)
 	mux := http.NewServeMux()
 
 	handlers := map[string]http.HandlerFunc{
@@ -53,7 +57,7 @@ func DatadogServerMock(overwriteHandlerFuncs ...OverwriteHandleFunc) *DatadogSer
 		MetricV1Endpoint:       metricsEndpoint,
 		MetricV2Endpoint:       metricsV2Endpoint,
 		MetadataEndpoint:       newMetadataEndpoint(metadataChan),
-		"/":                    func(w http.ResponseWriter, r *http.Request) {},
+		"/":                    func(_ http.ResponseWriter, _ *http.Request) {},
 	}
 	for _, f := range overwriteHandlerFuncs {
 		p, hf := f()
@@ -82,9 +86,22 @@ type HTTPRequestRecorder struct {
 }
 
 func (rec *HTTPRequestRecorder) HandlerFunc() (string, http.HandlerFunc) {
-	return rec.Pattern, func(w http.ResponseWriter, r *http.Request) {
+	return rec.Pattern, func(_ http.ResponseWriter, r *http.Request) {
 		rec.Header = r.Header
 		rec.ByteBody, _ = io.ReadAll(r.Body)
+	}
+}
+
+// HTTPRequestRecorderWithChan puts all incoming HTTP request bytes to the given channel.
+type HTTPRequestRecorderWithChan struct {
+	Pattern string
+	ReqChan chan []byte
+}
+
+func (rec *HTTPRequestRecorderWithChan) HandlerFunc() (string, http.HandlerFunc) {
+	return rec.Pattern, func(_ http.ResponseWriter, r *http.Request) {
+		bytesBody, _ := io.ReadAll(r.Body)
+		rec.ReqChan <- bytesBody
 	}
 }
 
@@ -147,10 +164,27 @@ func metricsV2Endpoint(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func newMetadataEndpoint(c chan []byte) func(http.ResponseWriter, *http.Request) {
+func newMetadataEndpoint(c chan payload.HostMetadata) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		c <- body
+		reader, err := gzip.NewReader(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		body, err := io.ReadAll(reader)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		var recvMetadata payload.HostMetadata
+		if err = json.Unmarshal(body, &recvMetadata); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+
+		c <- recvMetadata
 	}
 }
 

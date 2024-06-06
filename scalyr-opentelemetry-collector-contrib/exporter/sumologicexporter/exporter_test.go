@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/plog"
 )
 
-func LogRecordsToLogs(records []plog.LogRecord) plog.Logs {
+func logRecordsToLogs(records []plog.LogRecord) plog.Logs {
 	logs := plog.NewLogs()
 	logsSlice := logs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
 	for _, record := range records {
@@ -35,7 +35,7 @@ func TestInitExporter(t *testing.T) {
 		LogFormat:        "json",
 		MetricFormat:     "carbon2",
 		CompressEncoding: "gzip",
-		HTTPClientSettings: confighttp.HTTPClientSettings{
+		ClientConfig: confighttp.ClientConfig{
 			Timeout:  defaultTimeout,
 			Endpoint: "test_endpoint",
 		},
@@ -53,7 +53,7 @@ func TestAllSuccess(t *testing.T) {
 	})
 	defer func() { test.srv.Close() }()
 
-	logs := LogRecordsToLogs(exampleLog())
+	logs := logRecordsToLogs(exampleLog())
 
 	err := test.exp.pushLogsData(context.Background(), logs)
 	assert.NoError(t, err)
@@ -73,7 +73,7 @@ func TestResourceMerge(t *testing.T) {
 	require.NoError(t, err)
 	test.exp.filter = f
 
-	logs := LogRecordsToLogs(exampleLog())
+	logs := logRecordsToLogs(exampleLog())
 	logs.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Attributes().PutStr("key1", "original_value")
 	logs.ResourceLogs().At(0).Resource().Attributes().PutStr("key1", "overwrite_value")
 	logs.ResourceLogs().At(0).Resource().Attributes().PutStr("key2", "additional_value")
@@ -94,7 +94,7 @@ func TestAllFailed(t *testing.T) {
 	})
 	defer func() { test.srv.Close() }()
 
-	logs := LogRecordsToLogs(exampleTwoLogs())
+	logs := logRecordsToLogs(exampleTwoLogs())
 
 	err := test.exp.pushLogsData(context.Background(), logs)
 	assert.EqualError(t, err, "error during sending data: 500 Internal Server Error")
@@ -126,8 +126,8 @@ func TestPartiallyFailed(t *testing.T) {
 	test.exp.filter = f
 
 	records := exampleTwoDifferentLogs()
-	logs := LogRecordsToLogs(records)
-	expected := LogRecordsToLogs(records[:1])
+	logs := logRecordsToLogs(records)
+	expected := logRecordsToLogs(records[:1])
 
 	err = test.exp.pushLogsData(context.Background(), logs)
 	assert.EqualError(t, err, "error during sending data: 500 Internal Server Error")
@@ -142,7 +142,7 @@ func TestInvalidSourceFormats(t *testing.T) {
 		LogFormat:        "json",
 		MetricFormat:     "carbon2",
 		CompressEncoding: "gzip",
-		HTTPClientSettings: confighttp.HTTPClientSettings{
+		ClientConfig: confighttp.ClientConfig{
 			Timeout:  defaultTimeout,
 			Endpoint: "test_endpoint",
 		},
@@ -156,7 +156,7 @@ func TestInvalidHTTPCLient(t *testing.T) {
 		LogFormat:        "json",
 		MetricFormat:     "carbon2",
 		CompressEncoding: "gzip",
-		HTTPClientSettings: confighttp.HTTPClientSettings{
+		ClientConfig: confighttp.ClientConfig{
 			Endpoint: "test_endpoint",
 			CustomRoundTripper: func(next http.RoundTripper) (http.RoundTripper, error) {
 				return nil, errors.New("roundTripperException")
@@ -180,7 +180,7 @@ func TestPushInvalidCompressor(t *testing.T) {
 	})
 	defer func() { test.srv.Close() }()
 
-	logs := LogRecordsToLogs(exampleLog())
+	logs := logRecordsToLogs(exampleLog())
 
 	test.exp.config.CompressEncoding = "invalid"
 
@@ -213,7 +213,7 @@ func TestPushFailedBatch(t *testing.T) {
 	})
 	defer func() { test.srv.Close() }()
 
-	logs := LogRecordsToLogs(exampleLog())
+	logs := logRecordsToLogs(exampleLog())
 	logs.ResourceLogs().EnsureCapacity(maxBufferSize + 1)
 	log := logs.ResourceLogs().At(0)
 

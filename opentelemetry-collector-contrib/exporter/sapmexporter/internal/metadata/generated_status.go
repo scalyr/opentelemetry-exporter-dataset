@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("sapm")
+)
+
 const (
-	Type            = "sapm"
 	TracesStability = component.StabilityLevelBeta
 )

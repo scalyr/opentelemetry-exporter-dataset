@@ -1,11 +1,12 @@
 GO ?= go
 GORELEASER ?= goreleaser
 
-OTELCOL_BUILDER_VERSION ?= 0.83.0
+OTELCOL_BUILDER_VERSION ?= 0.102.1
 OTELCOL_BUILDER_DIR ?= ${HOME}/bin
 OTELCOL_BUILDER ?= ${OTELCOL_BUILDER_DIR}/ocb
 
-DISTRIBUTIONS ?= "otelcol,otelcol-contrib"
+DISTRIBUTIONS ?= "otelcol,otelcol-contrib,otelcol-k8s"
+GEN_CONFIG_DISTRIBUTIONS ?= "otelcol,otelcol-contrib"
 
 ci: check build
 check: ensure-goreleaser-up-to-date
@@ -16,7 +17,7 @@ build: go ocb
 generate: generate-sources generate-goreleaser
 
 generate-goreleaser: go
-	@${GO} run cmd/goreleaser/main.go -d "${DISTRIBUTIONS}" > .goreleaser.yaml
+	@./scripts/generate-goreleaser.sh -d "${GEN_CONFIG_DISTRIBUTIONS}" -g ${GO}
 
 generate-sources: go ocb
 	@./scripts/build.sh -d "${DISTRIBUTIONS}" -s true -b ${OTELCOL_BUILDER} -g ${GO}
@@ -25,7 +26,7 @@ goreleaser-verify: goreleaser
 	@${GORELEASER} release --snapshot --clean
 
 ensure-goreleaser-up-to-date: generate-goreleaser
-	@git diff -s --exit-code .goreleaser.yaml || (echo "Build failed: The goreleaser templates have changed but the .goreleaser.yaml hasn't. Run 'make generate-goreleaser' and update your PR." && exit 0)
+	@git diff -s --exit-code distributions/*/.goreleaser.yaml || (echo "Check failed: The goreleaser templates have changed but the .goreleaser.yamls haven't. Run 'make generate-goreleaser' and update your PR." && exit 1)
 
 .PHONY: ocb
 ocb:

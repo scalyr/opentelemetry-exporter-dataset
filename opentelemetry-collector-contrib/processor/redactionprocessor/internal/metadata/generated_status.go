@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("redaction")
+)
+
 const (
-	Type            = "redaction"
 	TracesStability = component.StabilityLevelBeta
 )

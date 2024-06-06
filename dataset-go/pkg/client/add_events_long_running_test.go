@@ -30,10 +30,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scalyr/dataset-go/pkg/server_host_config"
-
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 	"github.com/scalyr/dataset-go/pkg/config"
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -43,10 +42,12 @@ import (
 
 func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	const MaxDelay = 200 * time.Millisecond
+	const PurgeOlderThan = 15 * MaxDelay
 
-	const MaxBatchCount = 20
-	const LogsPerBatch = 10000
-	const ExpectedLogs = uint64(MaxBatchCount * LogsPerBatch)
+	const Cycles = 3
+	const MaxBatchCount = 400
+	const LogsPerBatch = 500
+	const ExpectedLogs = uint64(Cycles * MaxBatchCount * LogsPerBatch)
 
 	attempt := atomic.Uint64{}
 	lastCall := atomic.Int64{}
@@ -63,8 +64,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 
 		for _, ev := range cer.Events {
 			processedEvents.Add(1)
-			key, found := ev.Attrs["body.str"]
-			assert.True(t, found)
+			key := ev.Attrs["body.str"]
 			seenMutex.Lock()
 			sKey := key.(string)
 			_, f := seenKeys[sKey]
@@ -74,6 +74,9 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			seenKeys[sKey] += 1
 			seenMutex.Unlock()
 		}
+
+		batch := (*cer.SessionInfo)["batch"]
+		t.Logf("Accepting batch: %s", batch.(string))
 
 		lastCall.Store(time.Now().UnixNano())
 		time.Sleep(time.Duration(float64(MaxDelay) * 0.6))
@@ -92,7 +95,9 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
 			MaxSize:                  1000,
+			GroupBy:                  []string{"batch"},
 			MaxLifetime:              5 * MaxDelay,
+			PurgeOlderThan:           PurgeOlderThan,
 			RetryRandomizationFactor: 1.0,
 			RetryMultiplier:          1.0,
 			RetryInitialInterval:     RetryBase,
@@ -102,49 +107,55 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
+	lastCall.Store(time.Now().UnixNano())
+	for cI := 0; cI < Cycles; cI++ {
+		for bI := 0; bI < MaxBatchCount; bI++ {
+			batch := make([]*add_events.EventBundle, 0)
+			batchKey := fmt.Sprintf("%d", bI)
+			for lI := 0; lI < LogsPerBatch; lI++ {
+				key := fmt.Sprintf("%04d-%04d-%06d", cI, bI, lI)
+				attrs := make(map[string]interface{})
+				attrs["batch"] = batchKey
+				attrs["body.str"] = key
+				attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
 
-	for bI := 0; bI < MaxBatchCount; bI++ {
-		batch := make([]*add_events.EventBundle, 0)
-		for lI := 0; lI < LogsPerBatch; lI++ {
-			key := fmt.Sprintf("%04d-%06d", bI, lI)
-			attrs := make(map[string]interface{})
-			attrs["body.str"] = key
-			attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
+				event := &add_events.Event{
+					Thread: "5",
+					Sev:    3,
+					Ts:     fmt.Sprintf("%d", time.Now().Nanosecond()),
+					Attrs:  attrs,
+				}
 
-			event := &add_events.Event{
-				Thread: "5",
-				Sev:    3,
-				Ts:     fmt.Sprintf("%d", time.Now().Nanosecond()),
-				Attrs:  attrs,
+				thread := &add_events.Thread{
+					Id:   "5",
+					Name: "fred",
+				}
+				log := &add_events.Log{
+					Id: "LO",
+					Attrs: map[string]interface{}{
+						"key": strings.Repeat("A", rand.Intn(200)),
+					},
+				}
+				eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
+
+				batch = append(batch, eventBundle)
+				expectedKeys[key] = 1
 			}
 
-			thread := &add_events.Thread{
-				Id:   "5",
-				Name: "fred",
-			}
-			log := &add_events.Log{
-				Id: "LO",
-				Attrs: map[string]interface{}{
-					"key": strings.Repeat("A", rand.Intn(200)),
-				},
-			}
-			eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
-
-			batch = append(batch, eventBundle)
-			expectedKeys[key] = 1
+			t.Logf("Adding batch: %s (%d)", batchKey, cI)
+			go (func(batch []*add_events.EventBundle) {
+				err := sc.AddEvents(batch)
+				assert.Nil(t, err)
+			})(batch)
+			time.Sleep(MaxDelay)
 		}
-
-		t.Logf("Consuming batch: %d", bI)
-		go (func(batch []*add_events.EventBundle) {
-			err := sc.AddEvents(batch)
-			assert.Nil(t, err)
-		})(batch)
-		time.Sleep(time.Duration(float64(MaxDelay) * 0.3))
+		time.Sleep(2 * PurgeOlderThan)
+		stats := sc.Statistics()
+		assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
+		assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 	}
 
 	for {
@@ -171,6 +182,10 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
 
 	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
+
+	assert.Equal(t, uint64(Cycles*MaxBatchCount), stats.Sessions.SessionsOpened())
+	assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
+	assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 
 	assert.Equal(t, seenKeys, expectedKeys)
 	assert.Equal(t, int(processedEvents.Load()), int(ExpectedLogs), "processed items")

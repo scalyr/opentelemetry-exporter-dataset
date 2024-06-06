@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("flinkmetrics")
+)
+
 const (
-	Type             = "flinkmetrics"
 	MetricsStability = component.StabilityLevelAlpha
 )

@@ -105,6 +105,7 @@ func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt1"}),
 		WithBufferSettings(*bufCfg),
 		WithServerHostSettings(*hostCfg),
+		WithDebug(true),
 	)
 	// AND
 	bufCfg2, _ := buffer_config.New(
@@ -141,6 +142,7 @@ func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
 		ServerHost:  "AAA",
 		UseHostName: false,
 	}, cfg5.ServerHostSettings)
+	assert.Equal(t, true, cfg5.Debug)
 
 	// AND new config is changed
 	assert.Equal(t, "https://fooOpt2", cfg6.Endpoint)
@@ -157,11 +159,12 @@ func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
 		ServerHost:  "BBB",
 		UseHostName: true,
 	}, cfg6.ServerHostSettings)
+	assert.Equal(t, true, cfg6.Debug)
 }
 
 func TestNewDefaultDataSetConfigToString(t *testing.T) {
 	cfg := NewDefaultDataSetConfig()
-	assert.Equal(t, cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s, RetryShutdownTimeout: 30s), ServerHostSettings: (UseHostName: true, ServerHost: )")
+	assert.Equal(t, cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, PurgeOlderThan: 30s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s, RetryShutdownTimeout: 30s), ServerHostSettings: (UseHostName: true, ServerHost: ), Debug: (false)")
 }
 
 func TestNewDefaultDataSetConfigIsValid(t *testing.T) {

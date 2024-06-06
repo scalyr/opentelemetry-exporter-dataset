@@ -1,4 +1,21 @@
 # Release Notes
+## 0.18.0
+
+* break: drop support for Go 1.20 and add testing for Go 1.22
+* fix: release resources associated with inactive sessions
+
+## 0.17.0
+
+* break: export metrics as attributes and as snake_case
+
+## 0.16.0
+
+* feat: introduce open telemetry metrics to increase observability
+
+## 0.15.0
+
+* break: move grouped attributes to session info
+
 
 ## 0.14.0
 

@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("awsfirehose")
+)
+
 const (
-	Type             = "awsfirehose"
 	MetricsStability = component.StabilityLevelAlpha
 )

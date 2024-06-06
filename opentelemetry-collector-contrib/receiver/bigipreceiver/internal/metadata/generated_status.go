@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("bigip")
+)
+
 const (
-	Type             = "bigip"
 	MetricsStability = component.StabilityLevelBeta
 )

@@ -6,7 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("opensearch")
+)
+
 const (
-	Type            = "opensearch"
-	TracesStability = component.StabilityLevelDevelopment
+	LogsStability   = component.StabilityLevelDevelopment
+	TracesStability = component.StabilityLevelAlpha
 )
