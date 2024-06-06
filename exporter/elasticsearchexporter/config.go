@@ -4,8 +4,10 @@
 package elasticsearchexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/elasticsearchexporter"
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -56,18 +58,25 @@ type Config struct {
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/ingest.html
 	Pipeline string `mapstructure:"pipeline"`
 
-	HTTPClientSettings `mapstructure:",squash"`
-	Discovery          DiscoverySettings `mapstructure:"discover"`
-	Retry              RetrySettings     `mapstructure:"retry"`
-	Flush              FlushSettings     `mapstructure:"flush"`
-	Mapping            MappingsSettings  `mapstructure:"mapping"`
+	ClientConfig   `mapstructure:",squash"`
+	Discovery      DiscoverySettings      `mapstructure:"discover"`
+	Retry          RetrySettings          `mapstructure:"retry"`
+	Flush          FlushSettings          `mapstructure:"flush"`
+	Mapping        MappingsSettings       `mapstructure:"mapping"`
+	LogstashFormat LogstashFormatSettings `mapstructure:"logstash_format"`
+}
+
+type LogstashFormatSettings struct {
+	Enabled         bool   `mapstructure:"enabled"`
+	PrefixSeparator string `mapstructure:"prefix_separator"`
+	DateFormat      string `mapstructure:"date_format"`
 }
 
 type DynamicIndexSetting struct {
 	Enabled bool `mapstructure:"enabled"`
 }
 
-type HTTPClientSettings struct {
+type ClientConfig struct {
 	Authentication AuthenticationSettings `mapstructure:",squash"`
 
 	// ReadBufferSize for HTTP client. See http.Transport.ReadBufferSize.
@@ -83,7 +92,7 @@ type HTTPClientSettings struct {
 	// will be send with each HTTP request.
 	Headers map[string]string `mapstructure:"headers,omitempty"`
 
-	configtls.TLSClientSetting `mapstructure:"tls,omitempty"`
+	configtls.ClientConfig `mapstructure:"tls,omitempty"`
 }
 
 // AuthenticationSettings defines user authentication related settings.
@@ -144,6 +153,9 @@ type RetrySettings struct {
 
 	// MaxInterval configures the max waiting time if consecutive requests failed.
 	MaxInterval time.Duration `mapstructure:"max_interval"`
+
+	// RetryOnStatus configures the status codes that trigger request or document level retries.
+	RetryOnStatus []int `mapstructure:"retry_on_status"`
 }
 
 type MappingsSettings struct {
@@ -168,11 +180,13 @@ type MappingMode int
 const (
 	MappingNone MappingMode = iota
 	MappingECS
+	MappingRaw
 )
 
 var (
-	errConfigNoEndpoint    = errors.New("endpoints or cloudid must be specified")
-	errConfigEmptyEndpoint = errors.New("endpoints must not include empty entries")
+	errConfigNoEndpoint               = errors.New("endpoints or cloudid must be specified")
+	errConfigEmptyEndpoint            = errors.New("endpoints must not include empty entries")
+	errConfigCloudIDMutuallyExclusive = errors.New("only one of endpoints or cloudid may be specified")
 )
 
 func (m MappingMode) String() string {
@@ -181,6 +195,8 @@ func (m MappingMode) String() string {
 		return ""
 	case MappingECS:
 		return "ecs"
+	case MappingRaw:
+		return "raw"
 	default:
 		return ""
 	}
@@ -191,6 +207,7 @@ var mappingModes = func() map[string]MappingMode {
 	for _, m := range []MappingMode{
 		MappingNone,
 		MappingECS,
+		MappingRaw,
 	} {
 		table[strings.ToLower(m.String())] = m
 	}
@@ -207,8 +224,24 @@ const defaultElasticsearchEnvName = "ELASTICSEARCH_URL"
 // Validate validates the elasticsearch server configuration.
 func (cfg *Config) Validate() error {
 	if len(cfg.Endpoints) == 0 && cfg.CloudID == "" {
-		if os.Getenv(defaultElasticsearchEnvName) == "" {
+		v := os.Getenv(defaultElasticsearchEnvName)
+		if v == "" {
 			return errConfigNoEndpoint
+		}
+		for _, endpoint := range strings.Split(v, ",") {
+			endpoint = strings.TrimSpace(endpoint)
+			if err := validateEndpoint(endpoint); err != nil {
+				return fmt.Errorf("invalid endpoint %q: %w", endpoint, err)
+			}
+		}
+	}
+
+	if cfg.CloudID != "" {
+		if len(cfg.Endpoints) > 0 {
+			return errConfigCloudIDMutuallyExclusive
+		}
+		if _, err := parseCloudID(cfg.CloudID); err != nil {
+			return err
 		}
 	}
 
@@ -216,11 +249,53 @@ func (cfg *Config) Validate() error {
 		if endpoint == "" {
 			return errConfigEmptyEndpoint
 		}
+		if err := validateEndpoint(endpoint); err != nil {
+			return fmt.Errorf("invalid endpoint %q: %w", endpoint, err)
+		}
 	}
 
 	if _, ok := mappingModes[cfg.Mapping.Mode]; !ok {
-		return fmt.Errorf("unknown mapping mode %v", cfg.Mapping.Mode)
+		return fmt.Errorf("unknown mapping mode %q", cfg.Mapping.Mode)
 	}
 
 	return nil
+}
+
+func validateEndpoint(endpoint string) error {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return err
+	}
+	switch u.Scheme {
+	case "http", "https":
+	default:
+		return fmt.Errorf(`invalid scheme %q, expected "http" or "https"`, u.Scheme)
+	}
+	return nil
+}
+
+// Based on "addrFromCloudID" in go-elasticsearch.
+func parseCloudID(input string) (*url.URL, error) {
+	_, after, ok := strings.Cut(input, ":")
+	if !ok {
+		return nil, fmt.Errorf("invalid CloudID %q", input)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(after)
+	if err != nil {
+		return nil, err
+	}
+
+	before, after, ok := strings.Cut(string(decoded), "$")
+	if !ok {
+		return nil, fmt.Errorf("invalid decoded CloudID %q", string(decoded))
+	}
+	return url.Parse(fmt.Sprintf("https://%s.%s", after, before))
+}
+
+// MappingMode returns the mapping.mode defined in the given cfg
+// object. This method must be called after cfg.Validate() has been
+// called without returning an error.
+func (cfg *Config) MappingMode() MappingMode {
+	return mappingModes[cfg.Mapping.Mode]
 }

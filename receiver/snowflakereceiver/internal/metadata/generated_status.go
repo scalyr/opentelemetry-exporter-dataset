@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("snowflake")
+)
+
 const (
-	Type             = "snowflake"
 	MetricsStability = component.StabilityLevelAlpha
 )

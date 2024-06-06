@@ -6,8 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("exceptions")
+)
+
 const (
-	Type                     = "exceptions"
-	TracesToMetricsStability = component.StabilityLevelDevelopment
-	TracesToLogsStability    = component.StabilityLevelDevelopment
+	TracesToMetricsStability = component.StabilityLevelAlpha
+	TracesToLogsStability    = component.StabilityLevelAlpha
 )

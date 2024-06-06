@@ -6,7 +6,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type = component.MustNewType("nginx")
+)
+
 const (
-	Type             = "nginx"
 	MetricsStability = component.StabilityLevelBeta
 )
