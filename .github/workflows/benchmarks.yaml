@@ -70,7 +70,7 @@ jobs:
       - name: Store Results as Artifact
         # We also store artifacts on failure to make troubleshooting easier
         if: ${{ success() || failure() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-local-dummy-server
           path: |
@@ -248,7 +248,7 @@ jobs:
           echo "json=[$result_online]" >> "$GITHUB_OUTPUT"
 
       - name: Store Results as Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-dataset-prod-us
           path: |
