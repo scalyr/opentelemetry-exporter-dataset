@@ -164,14 +164,21 @@ For the configuration option you should check [documentation](datasetexporter/RE
    ```bash
    ./scripts/update-dataset-go-version.sh -f v0.18.0 -t v0.20.0
    ```
-6. Build all docker images
+7. Build all docker images
    ```bash
    make docker-build
    ```
-7. Run e2e tests
-   ```bash
-   make test-e2e
-   ```
+8. Run e2e tests
+   * Set environment variables for the tests
+     ```bash
+     export TEST_RUN_SERVERHOST=`date +"%s"`
+     export DATASET_URL=https://app.scalyr.com/
+     export DATASET_API_KEY=FOO
+     ```
+   * Run the tests
+     ```bash
+     make test-e2e
+     ```
 
 
 ## Testing Changes Locally
