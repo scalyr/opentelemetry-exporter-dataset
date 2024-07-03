@@ -49,11 +49,11 @@ test: test-all
 
 .PHONY: test-unit
 test-unit:
-	$(GOTEST) $(GOTEST_OPT) ./...
+	time $(GOTEST) $(GOTEST_OPT) ./...
 
 .PHONY: test-all
 test-all:
-	$(GOTEST) $(GOTEST_LONG_RUNNING_OPT) ./...
+	time $(GOTEST) $(GOTEST_LONG_RUNNING_OPT) ./...
 
 .PHONY: test-many-times
 test-many-times:
@@ -93,7 +93,7 @@ coverage-all:
 build-examples:
 	for d in examples/*; do \
   		echo "Build example: $${d}"; \
-		(cd $${d}; go mod tidy && go build) || exit 1; \
+		(cd $${d}; go mod tidy && go build -race) || exit 1; \
 	done;
 
 .PHONY: test-ssl-certificates

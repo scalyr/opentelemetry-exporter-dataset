@@ -17,24 +17,16 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"runtime"
 	"testing"
-
-	"github.com/scalyr/dataset-go/pkg/server_host_config"
 
 	"github.com/scalyr/dataset-go/pkg/version"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/scalyr/dataset-go/pkg/buffer_config"
-
-	"github.com/scalyr/dataset-go/pkg/api/add_events"
-	"github.com/scalyr/dataset-go/pkg/buffer"
 	"github.com/scalyr/dataset-go/pkg/config"
 	"go.uber.org/zap"
 )
@@ -53,79 +45,6 @@ func TestNewClient(t *testing.T) {
 	assert.Equal(t, sc4.Config.Tokens.WriteLog, "writelog")
 	assert.Equal(t, sc4.Config.Tokens.ReadConfig, "readconfig")
 	assert.Equal(t, sc4.Config.Tokens.WriteConfig, "writeconfig")
-}
-
-func TestClientBuffer(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := fmt.Fprintln(w, "{ \"hello\": \"yo\" }")
-		assert.Nil(t, err)
-	}))
-
-	token := "token-test"
-	sc, err := NewClient(&config.DataSetConfig{
-		Endpoint:           ts.URL,
-		Tokens:             config.DataSetTokens{WriteLog: token},
-		BufferSettings:     buffer_config.NewDefaultDataSetBufferSettings(),
-		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
-	}, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
-	require.Nil(t, err)
-
-	sessionInfo := add_events.SessionInfo{
-		"ServerId":   "serverId",
-		"ServerType": "testing",
-	}
-
-	event1 := &add_events.Event{
-		Thread: "TId",
-		Sev:    3,
-		Ts:     "1",
-		Attrs: map[string]interface{}{
-			"message": "test - 1",
-			"meh":     1,
-		},
-	}
-
-	sc.newBufferForEvents("aaa", &sessionInfo)
-	buffer1 := sc.getBuffer("aaa")
-	added, err := buffer1.AddBundle(&add_events.EventBundle{Event: event1})
-	assert.Nil(t, err)
-	assert.Equal(t, added, buffer.Added)
-
-	payload1, err := buffer1.Payload()
-	assert.Nil(t, err)
-	params1 := add_events.AddEventsRequest{}
-	err = json.Unmarshal(payload1, &params1)
-	assert.Nil(t, err)
-
-	event2 := &add_events.Event{
-		Thread: "TId",
-		Sev:    3,
-		Ts:     "2",
-		Attrs: map[string]interface{}{
-			"message": "test - 2",
-			"meh":     1,
-		},
-	}
-
-	sc.publishBuffer(buffer1)
-	buffer2 := sc.getBuffer("aaa")
-	added2, err := buffer2.AddBundle(&add_events.EventBundle{Event: event2})
-	assert.Nil(t, err)
-	assert.Equal(t, added2, buffer.Added)
-
-	payload2, err := buffer2.Payload()
-	assert.Nil(t, err)
-	params2 := add_events.AddEventsRequest{}
-	err = json.Unmarshal(payload2, &params2)
-	assert.Nil(t, err)
-
-	assert.Equal(t, params1.Token, params2.Token)
-	assert.Equal(t, params1.Session, params2.Session)
-	assert.Equal(t, params1.SessionInfo, params2.SessionInfo)
-
-	assert.NotEqual(t, (params1.Events)[0], (params2.Events)[0])
-	assert.Equal(t, (params1.Events)[0].Ts, "1")
-	assert.Equal(t, (params2.Events)[0].Ts, "2")
 }
 
 func TestHttpStatusCodes(t *testing.T) {

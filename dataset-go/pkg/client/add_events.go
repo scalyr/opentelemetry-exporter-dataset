@@ -20,7 +20,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -135,9 +134,13 @@ func adjustServerHost(bundle *add_events.EventBundle, serverHost string) {
 // AddEvents enqueues given events for processing (sending to Dataset).
 // It returns an error if the batch was not accepted (e.g. exporter in error state and retrying handle previous batches or client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
+	client.statistics.AddEventsEnteredAdd(1)
+	defer func() { client.statistics.AddEventsExitedAdd(1) }()
+
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
 	}
+
 	shouldReject, errR := client.isInErrorState()
 	if shouldReject {
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
@@ -163,26 +166,13 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		client.firstReceivedAt.Store(time.Now().UnixNano())
 	}
 
-	// then create all subscribers
-	// add subscriber for events by key
-	// add subscriber for buffer by key
-	client.addEventsMutex.Lock()
 	for key, list := range bundlesWithMeta {
-		_, found := client.eventBundleSubscriptionChannels[key]
-		if !found {
-			// add information about the host to the sessionInfo
-			client.newBufferForEvents(key, &list[0].SessionInfo)
-
-			client.newEventBundleSubscriberRoutine(key)
-		}
-	}
-	client.addEventsMutex.Unlock()
-
-	// and as last step - publish them
-
-	for key, list := range bundlesWithMeta {
+		// start listening for events
+		// if the purge time for buffer is just few ms, this is the cause of problems
+		// in real life the purge time should be in minutes.
+		client.sessionManager.Sub(key)
 		for _, bundle := range list {
-			client.eventBundlePerKeyTopic.Pub(bundle, key)
+			client.sessionManager.Pub(key, bundle)
 			client.statistics.EventsEnqueuedAdd(1)
 		}
 	}
@@ -190,122 +180,137 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	return nil
 }
 
-func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
-	ch := client.eventBundlePerKeyTopic.Sub(key)
-	client.eventBundleSubscriptionChannels[key] = ch
-	go (func(session string, ch chan interface{}) {
-		client.listenAndSendBundlesForKey(key, ch)
-	})(key, ch)
-}
-
-func (client *DataSetClient) newBufferForEvents(session string, info *add_events.SessionInfo) {
+func (client *DataSetClient) newBufferForEvents(session string, info *add_events.SessionInfo) *buffer.Buffer {
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 
 	client.initBuffer(buf, info)
 
-	client.buffersAllMutex.Lock()
-	client.buffers[session] = buf
-	defer client.buffersAllMutex.Unlock()
-
-	// create subscriber, so all the upcoming buffers are processed as well
-	client.newBuffersSubscriberRoutine(session)
+	return buf
 }
 
-func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
-	client.Logger.Debug("Listening to events with key",
+func (client *DataSetClient) processEvents(key string, eventsChannel <-chan interface{}) {
+	client.Logger.Info("Listening to events with key - BEGIN",
 		zap.String("key", key),
 	)
+	client.statistics.SessionsOpenedAdd(1)
 
-	// this function has to be called from AddEvents - inner loop
-	// it assumes that all bundles have the same key
-	getBuffer := func(key string) *buffer.Buffer {
-		buf := client.getBuffer(key)
-		// change state to mark that bundles are being added
-		buf.SetStatus(buffer.AddingBundles)
+	defer func() {
+		client.Logger.Info("Listening to events with key - END",
+			zap.String("key", key),
+		)
+		client.statistics.SessionsClosedAdd(1)
+	}()
+
+	publish := func(key string, buf *buffer.Buffer) *buffer.Buffer {
+		if buf == nil {
+			return nil
+		}
+		if !buf.HasEvents() {
+			return buf
+		}
+		client.publishBuffer(buf)
+		return client.newBufferForEvents(buf.Session, buf.SessionInfo())
+	}
+
+	process := func(buf *buffer.Buffer, bundle EventWithMeta) *buffer.Buffer {
+		defer func() {
+			client.lastAcceptedAt.Store(time.Now().UnixNano())
+		}()
+		if buf == nil {
+			buf = client.newBufferForEvents(key, &bundle.SessionInfo)
+		}
+		added, err := buf.AddBundle(bundle.EventBundle)
+		if err != nil {
+			client.Logger.Warn("Cannot add bundle", zap.Error(err))
+		}
+
+		if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
+			buf = publish(key, buf)
+		}
+
+		if added == buffer.TooMuch {
+			added, err = buf.AddBundle(bundle.EventBundle)
+			if err != nil {
+				client.Logger.Error("Cannot add bundle", zap.Error(err))
+				client.statistics.EventsDroppedAdd(1)
+				return buf
+			}
+			if buf.ShouldSendSize() {
+				buf = publish(key, buf)
+			}
+			if added == buffer.TooMuch {
+				client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
+				client.statistics.EventsDroppedAdd(1)
+				return buf
+			}
+		}
 		return buf
 	}
 
-	publish := func(key string, buf *buffer.Buffer) *buffer.Buffer {
-		client.publishBuffer(buf)
-		return getBuffer(key)
+	// create ticker to submit
+	lifeTime := time.Hour
+	if client.Config.BufferSettings.MaxLifetime > 0 {
+		lifeTime = client.Config.BufferSettings.MaxLifetime
 	}
+	tickerLifetime := time.NewTicker(lifeTime)
+	defer func() {
+		tickerLifetime.Stop()
+	}()
 
-	for processedMsgCnt := 0; ; processedMsgCnt++ {
-		msg, channelReceiveSuccess := <-ch
-		if !channelReceiveSuccess {
-			client.Logger.Error(
-				"Cannot receive EventWithMeta from channel",
-				zap.String("key", key),
-				zap.Any("msg", msg),
-			)
-			client.statistics.EventsBrokenAdd(1)
-			client.lastAcceptedAt.Store(time.Now().UnixNano())
-			continue
-		}
+	purgeTime := time.Hour
+	if client.Config.BufferSettings.PurgeOlderThan > 0 {
+		purgeTime = client.Config.BufferSettings.PurgeOlderThan
+	}
+	tickerPurge := time.NewTicker(purgeTime)
+	defer func() {
+		tickerPurge.Stop()
+	}()
 
-		bundle, ok := msg.(EventWithMeta)
-		if ok {
-			buf := getBuffer(key)
-
-			added, err := buf.AddBundle(bundle.EventBundle)
-			if err != nil {
-				if errors.Is(err, &buffer.NotAcceptingError{}) {
-					buf = getBuffer(key)
+	var buf *buffer.Buffer = nil
+	for {
+		select {
+		case <-client.eventsProcessingDone:
+			client.Logger.Debug("Shutting down listener for key", zap.String("key", key))
+			buf = publish(key, buf)
+			for msg := range eventsChannel {
+				event, ok := msg.(EventWithMeta)
+				if !ok {
+					client.statistics.EventsBrokenAdd(1)
 				} else {
-					client.Logger.Error("Cannot add bundle", zap.Error(err))
-					// TODO: what to do?
-					// this error happens when the buffer is already publishing
-					// we can solve it by waiting little bit
-					// since we are also returning TooMuch we will get new buffer
-					// few lines below
-					time.Sleep(10 * time.Millisecond)
-				}
-			}
-
-			if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
-				buf = publish(key, buf)
-			}
-
-			if added == buffer.TooMuch {
-				added, err = buf.AddBundle(bundle.EventBundle)
-				if err != nil {
-					if errors.Is(err, &buffer.NotAcceptingError{}) {
-						buf = getBuffer(key)
-					} else {
-						client.Logger.Error("Cannot add bundle", zap.Error(err))
-						client.statistics.EventsDroppedAdd(1)
-						continue
-					}
-				}
-				if buf.ShouldSendSize() {
+					buf = process(buf, event)
 					buf = publish(key, buf)
 				}
-				if added == buffer.TooMuch {
-					client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
-					client.statistics.EventsDroppedAdd(1)
-					continue
-				}
 			}
-			client.statistics.EventsProcessedAdd(1)
-
-			buf.SetStatus(buffer.Ready)
-			// it could happen that the buffer could have been published
-			// by buffer sweeper, but it was skipped, because we have been
-			// adding events, so lets check it and publish it if needed
-			if buf.PublishAsap.Load() {
-				client.publishBuffer(buf)
+			buf = publish(key, buf)
+			return
+		case msg, ok := <-eventsChannel:
+			// client.Logger.Debug("Processing message for key", zap.String("key", key))
+			if !ok {
+				return
 			}
-		} else {
-			_, purgeReadSuccess := msg.(Purge)
-			if purgeReadSuccess {
-				break
+			event, ok := msg.(EventWithMeta)
+			if !ok {
+				client.statistics.EventsBrokenAdd(1)
+			} else {
+				buf = process(buf, event)
 			}
-			client.Logger.Error(
-				"Cannot convert message to EventWithMeta",
-				zap.String("key", key),
-				zap.Any("msg", msg),
-			)
-			client.statistics.EventsBrokenAdd(1)
+			tickerLifetime.Reset(lifeTime)
+			tickerPurge.Reset(purgeTime)
+		case <-tickerLifetime.C:
+			// client.Logger.Debug("Processing life-time ticker for key", zap.String("key", key))
+			buf = publish(key, buf)
+		case <-tickerPurge.C:
+			// client.Logger.Debug("Processing purge ticker for key", zap.String("key", key))
+			// if buffer is null => we haven't received event
+			// lets wait until we receive something
+			if buf == nil {
+				continue
+			}
+			if buf.ShouldPurgeAge(purgeTime) {
+				client.Logger.Info("Purging key", zap.String("key", key))
+				client.sessionManager.Unsub(key)
+				return
+			}
 		}
 	}
 }
@@ -322,10 +327,17 @@ func (client *DataSetClient) isProcessingEvents() bool {
 	return client.statistics.EventsEnqueued() > (client.statistics.EventsProcessed() + client.statistics.EventsDropped() + client.statistics.EventsBroken())
 }
 
+// isProcessingEvents returns True if there are still some unprocessed events.
+// False otherwise.
+func (client *DataSetClient) isProcessingAddEvents() bool {
+	return client.statistics.AddEventsEntered() > client.statistics.AddEventsExited()
+}
+
 // Shutdown takes care of shutdown of client. It does following steps
 // - stops processing of new events,
-// - tries (with 1st half of shutdownMaxTimeout period) to process (add into buffers) all the events,
-// - tries (with 2nd half of shutdownMaxTimeout period) to send processed events (buffers) into DataSet
+// - tries (till 50% of shutdownMaxTimeout) to finish processing of all the incoming events
+// - tries (till 80% of shutdownMaxTimeout) to process (add into buffers) all the events,
+// - tries (till 100% of shutdownMaxTimeout) to send processed events (buffers) into DataSet
 func (client *DataSetClient) Shutdown() error {
 	client.Logger.Info("Shutting down - BEGIN")
 	// start measuring processing time
@@ -337,29 +349,63 @@ func (client *DataSetClient) Shutdown() error {
 	// log statistics when finish was called
 	client.logStatistics()
 
+	useUpTo := func(ratio float64, start time.Time, end time.Time) time.Duration {
+		elapsedFromStart := time.Since(start)
+		expectedFromStart := time.Duration(float64(end.Sub(start)) * ratio)
+		return expectedFromStart - elapsedFromStart
+	}
+
 	retryShutdownTimeout := client.Config.BufferSettings.RetryShutdownTimeout
-	maxElapsedTime := retryShutdownTimeout/2 - 100*time.Millisecond
+	expFinishTime := processingStart.Add(retryShutdownTimeout)
+
+	maxTimeForAddEvents := useUpTo(0.5, processingStart, expFinishTime)
 	client.Logger.Info(
-		"Shutting down - waiting for events",
-		zap.Duration("maxElapsedTime", maxElapsedTime),
+		"Shutting down - waiting for incoming add_events",
+		zap.Time("expFinishTime", expFinishTime),
+		zap.Duration("maxElapsedTime", maxTimeForAddEvents),
 		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
 		zap.Duration("elapsedTime", time.Since(processingStart)),
 	)
 
 	var lastError error = nil
-	expBackoff := backoff.ExponentialBackOff{
-		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
-		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
-		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
-		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-		MaxElapsedTime:      maxElapsedTime,
-		Stop:                backoff.Stop,
-		Clock:               backoff.SystemClock,
+	expBackoff := client.createBackOff(maxTimeForAddEvents)
+	expBackoff.Reset()
+	retryNum := 0
+	for client.isProcessingAddEvents() {
+		// log statistics
+		client.logStatistics()
+
+		backoffDelay := expBackoff.NextBackOff()
+		client.Logger.Info(
+			"Shutting down - processing incoming add_events",
+			zap.Int("retryNum", retryNum),
+			zap.Duration("backoffDelay", backoffDelay),
+			zap.Uint64("addEventsEntered", client.statistics.AddEventsEntered()),
+			zap.Uint64("addEventsExited", client.statistics.AddEventsExited()),
+			zap.Time("expFinishTime", expFinishTime),
+			zap.Duration("elapsedTime", time.Since(processingStart)),
+			zap.Duration("maxElapsedTime", maxTimeForAddEvents),
+		)
+		if backoffDelay == backoff.Stop {
+			break
+		}
+		time.Sleep(backoffDelay)
+		retryNum++
 	}
 
-	// try (with timeout) to process (add into buffers) events,
-	retryNum := 0
+	maxTimeForProcessingEvents := useUpTo(0.8, processingStart, expFinishTime)
+	client.Logger.Info(
+		"Shutting down - waiting processing events",
+		zap.Time("expFinishTime", expFinishTime),
+		zap.Duration("maxElapsedTime", maxTimeForProcessingEvents),
+		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
+		zap.Duration("elapsedTime", time.Since(processingStart)),
+	)
+
+	expBackoff = client.createBackOff(maxTimeForProcessingEvents)
 	expBackoff.Reset()
+	retryNum = 0
+	close(client.eventsProcessingDone)
 	initialEventsDropped := client.statistics.EventsDropped()
 	for client.isProcessingEvents() {
 		// log statistics
@@ -373,45 +419,28 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("eventsEnqueued", client.statistics.EventsEnqueued()),
 			zap.Uint64("eventsProcessed", client.statistics.EventsProcessed()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
-			zap.Duration("maxElapsedTime", maxElapsedTime),
+			zap.Duration("maxElapsedTime", maxTimeForProcessingEvents),
+			zap.Time("expFinishTime", expFinishTime),
 		)
-		if backoffDelay == expBackoff.Stop {
+		if backoffDelay == backoff.Stop {
 			break
 		}
 		time.Sleep(backoffDelay)
 		retryNum++
 	}
 
-	// send all buffers
-	client.Logger.Info(
-		"Shutting down - publishing all buffers",
-		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
-		zap.Duration("elapsedTime", time.Since(processingStart)),
-	)
-	client.publishAllBuffers()
-
-	// reinitialize expBackoff with MaxElapsedTime based on actually elapsed time of processing (previous phase)
-	processingElapsed := time.Since(processingStart)
-	maxElapsedTime = maxDuration(retryShutdownTimeout-processingElapsed, retryShutdownTimeout/2)
+	maxTimeForProcessingBuffers := useUpTo(1.0, processingStart, expFinishTime)
 	client.Logger.Info(
 		"Shutting down - waiting for buffers",
-		zap.Duration("maxElapsedTime", maxElapsedTime),
+		zap.Time("expFinishTime", expFinishTime),
+		zap.Duration("maxElapsedTime", maxTimeForProcessingBuffers),
 		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
 		zap.Duration("elapsedTime", time.Since(processingStart)),
 	)
-
-	expBackoff = backoff.ExponentialBackOff{
-		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
-		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
-		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
-		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-		MaxElapsedTime:      maxElapsedTime,
-		Stop:                backoff.Stop,
-		Clock:               backoff.SystemClock,
-	}
-	// do wait (with timeout) for all buffers to be sent to the server
-	retryNum = 0
+	expBackoff = client.createBackOff(maxTimeForProcessingBuffers)
 	expBackoff.Reset()
+	retryNum = 0
+	close(client.buffersProcessingDone)
 	initialBuffersDropped := client.statistics.BuffersDropped()
 	for client.isProcessingBuffers() {
 		// log statistics
@@ -426,9 +455,10 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
 			zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
-			zap.Duration("maxElapsedTime", maxElapsedTime),
+			zap.Time("expFinishTime", expFinishTime),
+			zap.Duration("maxElapsedTime", maxTimeForProcessingBuffers),
 		)
-		if backoffDelay == expBackoff.Stop {
+		if backoffDelay == backoff.Stop {
 			break
 		}
 		time.Sleep(backoffDelay)
@@ -610,28 +640,6 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 	return nil
 }
 
-// publishAllBuffers send all buffers to the server
-func (client *DataSetClient) publishAllBuffers() {
-	buffers := client.getBuffers()
-	client.Logger.Info(
-		"Publish all buffers",
-		zap.Int("numBuffers", len(buffers)),
-	)
-	for _, buf := range buffers {
-		client.publishBuffer(buf)
-	}
-}
-
-func (client *DataSetClient) getBuffers() []*buffer.Buffer {
-	buffers := make([]*buffer.Buffer, 0)
-	client.buffersAllMutex.Lock()
-	defer client.buffersAllMutex.Unlock()
-	for _, buf := range client.buffers {
-		buffers = append(buffers, buf)
-	}
-	return buffers
-}
-
 // Truncate provided text to the provided length
 func truncateText(text string, length int) string {
 	if len(text) > length {
@@ -639,11 +647,4 @@ func truncateText(text string, length int) string {
 	}
 
 	return text
-}
-
-func maxDuration(a, b time.Duration) time.Duration {
-	if a >= b {
-		return a
-	}
-	return b
 }
