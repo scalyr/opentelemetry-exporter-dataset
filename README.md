@@ -153,8 +153,11 @@ For the configuration option you should check [documentation](datasetexporter/RE
    * new version is from the [opentelemetry-collector-contrib](https://github.com/open-telemetry/opentelemetry-collector-contrib/releases)
    ```bash
    ./scripts/update-otel-version.sh -f v0.101.0 -t v0.104.0
-   ```   
-   
+   ```
+6. Build all docker images
+   ```bash
+   make docker-build
+   ```
 
 ## Testing Changes Locally
 
