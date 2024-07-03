@@ -37,7 +37,7 @@ func Test_statsdreceiver_Start(t *testing.T) {
 			name: "unsupported transport",
 			args: args{
 				config: Config{
-					NetAddr: confignet.NetAddr{
+					NetAddr: confignet.AddrConfig{
 						Endpoint:  "localhost:8125",
 						Transport: "unknown",
 					},
@@ -49,7 +49,7 @@ func Test_statsdreceiver_Start(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			receiver, err := newReceiver(receivertest.NewNopCreateSettings(), tt.args.config, tt.args.nextConsumer)
+			receiver, err := newReceiver(receivertest.NewNopSettings(), tt.args.config, tt.args.nextConsumer)
 			require.NoError(t, err)
 			err = receiver.Start(context.Background(), componenttest.NewNopHost())
 			assert.Equal(t, tt.wantErr, err)
@@ -63,7 +63,7 @@ func TestStatsdReceiver_ShutdownBeforeStart(t *testing.T) {
 	ctx := context.Background()
 	cfg := createDefaultConfig().(*Config)
 	nextConsumer := consumertest.NewNop()
-	rcv, err := newReceiver(receivertest.NewNopCreateSettings(), *cfg, nextConsumer)
+	rcv, err := newReceiver(receivertest.NewNopSettings(), *cfg, nextConsumer)
 	assert.NoError(t, err)
 	r := rcv.(*statsdReceiver)
 	assert.NoError(t, r.Shutdown(ctx))
@@ -73,7 +73,7 @@ func TestStatsdReceiver_Flush(t *testing.T) {
 	ctx := context.Background()
 	cfg := createDefaultConfig().(*Config)
 	nextConsumer := consumertest.NewNop()
-	rcv, err := newReceiver(receivertest.NewNopCreateSettings(), *cfg, nextConsumer)
+	rcv, err := newReceiver(receivertest.NewNopSettings(), *cfg, nextConsumer)
 	assert.NoError(t, err)
 	r := rcv.(*statsdReceiver)
 	var metrics = pmetric.NewMetrics()
@@ -94,9 +94,9 @@ func Test_statsdreceiver_EndToEnd(t *testing.T) {
 			addr: testutil.GetAvailableLocalNetworkAddress(t, "udp"),
 			configFn: func() *Config {
 				return &Config{
-					NetAddr: confignet.NetAddr{
+					NetAddr: confignet.AddrConfig{
 						Endpoint:  defaultBindEndpoint,
-						Transport: defaultTransport,
+						Transport: confignet.TransportTypeUDP,
 					},
 					AggregationInterval: 4 * time.Second,
 				}
@@ -113,7 +113,7 @@ func Test_statsdreceiver_EndToEnd(t *testing.T) {
 			cfg := tt.configFn()
 			cfg.NetAddr.Endpoint = tt.addr
 			sink := new(consumertest.MetricsSink)
-			rcv, err := newReceiver(receivertest.NewNopCreateSettings(), *cfg, sink)
+			rcv, err := newReceiver(receivertest.NewNopSettings(), *cfg, sink)
 			require.NoError(t, err)
 			r := rcv.(*statsdReceiver)
 

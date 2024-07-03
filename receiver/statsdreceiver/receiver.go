@@ -26,7 +26,7 @@ var _ receiver.Metrics = (*statsdReceiver)(nil)
 
 // statsdReceiver implements the receiver.Metrics for StatsD protocol.
 type statsdReceiver struct {
-	settings receiver.CreateSettings
+	settings receiver.Settings
 	config   *Config
 
 	server       transport.Server
@@ -38,13 +38,10 @@ type statsdReceiver struct {
 
 // newReceiver creates the StatsD receiver with the given parameters.
 func newReceiver(
-	set receiver.CreateSettings,
+	set receiver.Settings,
 	config Config,
 	nextConsumer consumer.Metrics,
 ) (receiver.Metrics, error) {
-	if nextConsumer == nil {
-		return nil, component.ErrNilNextConsumer
-	}
 
 	if config.NetAddr.Endpoint == "" {
 		config.NetAddr.Endpoint = "localhost:8125"
@@ -69,7 +66,7 @@ func newReceiver(
 
 func buildTransportServer(config Config) (transport.Server, error) {
 	// TODO: Add unix socket transport implementations
-	trans := transport.NewTransport(strings.ToLower(config.NetAddr.Transport))
+	trans := transport.NewTransport(strings.ToLower(string(config.NetAddr.Transport)))
 	switch trans {
 	case transport.UDP, transport.UDP4, transport.UDP6:
 		return transport.NewUDPServer(trans, config.NetAddr.Endpoint)
@@ -77,7 +74,7 @@ func buildTransportServer(config Config) (transport.Server, error) {
 		return transport.NewTCPServer(trans, config.NetAddr.Endpoint)
 	}
 
-	return nil, fmt.Errorf("unsupported transport %q", config.NetAddr.Transport)
+	return nil, fmt.Errorf("unsupported transport %q", string(config.NetAddr.Transport))
 }
 
 // Start starts a UDP server that can process StatsD messages.
