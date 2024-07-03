@@ -1,4 +1,4 @@
-name: Unit Tests
+name: Stress Tests
 
 on:
   push:
@@ -29,39 +29,31 @@ jobs:
           cancel_others: 'true'
           github_token: ${{ github.token }}
 
-  build:
+  stress-tests:
     strategy:
       # keep in sync with https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/.github/workflows/build-and-test.yml#L237
       matrix:
         go: ['1.21', '1.22']
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
 
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.11
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
           cache: true
-          cache-dependency-path: |
-            go.sum
-      - name: Run go mod vendor
+      - name: Run Stress Test - Each bucket used once
         run: |
-          go mod vendor
-      - name: Code tests
-        timeout-minutes: 15
+          ./scripts/run-stress-test.sh 10000 10000
+      - name: Run Stress Test - Max congestion
         run: |
-          make test
-      - name: Run Tests Many Times
-        timeout-minutes: 30
-        # Run test multiple times to check for flaky tests
-        if: github.ref_name == 'main'
-        run: |
-          make test-many-times COUNT=2
+          ./scripts/run-stress-test.sh 10000 -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.os }}-${{ matrix.go }}
+          path: examples/stress/*.log

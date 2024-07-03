@@ -27,6 +27,7 @@ const (
 	ShouldSentBufferSize = 5 * 1024 * 1024
 	// LimitBufferSize defines maximum payload size (before compression) for REST API
 	LimitBufferSize             = 5*1024*1024 + 960*1024
+	MinimalMaxSize              = 100
 	MinimalMaxElapsedTime       = time.Second
 	MinimalMaxInterval          = time.Second
 	MinimalInitialInterval      = 50 * time.Millisecond
@@ -36,6 +37,8 @@ const (
 	// MinimalPurgeToLifetimeRatio is the minimal ratio between buffer lifetime (when it's sent to server)
 	// and when the whole session is destroyed.
 	MinimalPurgeToLifetimeRatio = 3
+	MinimalMaxParallelOutgoing  = 1
+	MaximalMaxParallelOutgoing  = 1000
 )
 
 type DataSetBufferSettings struct {
@@ -48,7 +51,11 @@ type DataSetBufferSettings struct {
 	RetryInitialInterval     time.Duration
 	RetryMaxInterval         time.Duration
 	RetryMaxElapsedTime      time.Duration
-	RetryShutdownTimeout     time.Duration // defines timeout period (for which client will retry on failures) for processing events and sending buffers after shutdown of a client
+	// RetryShutdownTimeout defines timeout period (for which client will retry on failures)
+	//  for processing events and sending buffers after shutdown of a client
+	RetryShutdownTimeout time.Duration
+	// MaxParallelOutgoing maximum number of parallel outgoing requests to the server
+	MaxParallelOutgoing int
 }
 
 func NewDefaultDataSetBufferSettings() DataSetBufferSettings {
@@ -63,6 +70,7 @@ func NewDefaultDataSetBufferSettings() DataSetBufferSettings {
 		RetryRandomizationFactor: backoff.DefaultRandomizationFactor,
 		RetryMultiplier:          backoff.DefaultMultiplier,
 		RetryShutdownTimeout:     30 * time.Second,
+		MaxParallelOutgoing:      100,
 	}
 }
 
@@ -138,6 +146,13 @@ func WithRetryShutdownTimeout(retryShutdownTimeout time.Duration) DataSetBufferS
 	}
 }
 
+func WithMaxParallelOutgoing(maxParallelOutgoing int) DataSetBufferSettingsOption {
+	return func(c *DataSetBufferSettings) error {
+		c.MaxParallelOutgoing = maxParallelOutgoing
+		return nil
+	}
+}
+
 func New(opts ...DataSetBufferSettingsOption) (*DataSetBufferSettings, error) {
 	cfg := &DataSetBufferSettings{}
 	for _, opt := range opts {
@@ -160,7 +175,7 @@ func (cfg *DataSetBufferSettings) WithOptions(opts ...DataSetBufferSettingsOptio
 
 func (cfg *DataSetBufferSettings) String() string {
 	return fmt.Sprintf(
-		"MaxLifetime: %s, PurgeOlderThan: %s, MaxSize: %d, GroupBy: %s, RetryRandomizationFactor: %f, RetryMultiplier: %f, RetryInitialInterval: %s, RetryMaxInterval: %s, RetryMaxElapsedTime: %s, RetryShutdownTimeout: %s",
+		"MaxLifetime: %s, PurgeOlderThan: %s, MaxSize: %d, GroupBy: %s, RetryRandomizationFactor: %f, RetryMultiplier: %f, RetryInitialInterval: %s, RetryMaxInterval: %s, RetryMaxElapsedTime: %s, RetryShutdownTimeout: %s, MaxParallelOutgoing: %d",
 		cfg.MaxLifetime,
 		cfg.PurgeOlderThan,
 		cfg.MaxSize,
@@ -171,14 +186,15 @@ func (cfg *DataSetBufferSettings) String() string {
 		cfg.RetryMaxInterval,
 		cfg.RetryMaxElapsedTime,
 		cfg.RetryShutdownTimeout,
+		cfg.MaxParallelOutgoing,
 	)
 }
 
 func (cfg *DataSetBufferSettings) Validate() error {
 	if MinimalPurgeToLifetimeRatio*cfg.MaxLifetime > cfg.PurgeOlderThan {
 		return fmt.Errorf(
-			"MaxLifetime %d has to be at least %d times smaller than PurgeOlderThan %d",
-			cfg.MaxSize,
+			"MaxLifetime %s has to be at least %d times smaller than PurgeOlderThan %s",
+			cfg.MaxLifetime,
 			MinimalPurgeToLifetimeRatio,
 			cfg.PurgeOlderThan,
 		)
@@ -189,6 +205,14 @@ func (cfg *DataSetBufferSettings) Validate() error {
 			"MaxSize has value %d which is more than %d",
 			cfg.MaxSize,
 			LimitBufferSize,
+		)
+	}
+
+	if cfg.MaxSize < MinimalMaxSize {
+		return fmt.Errorf(
+			"MaxSize has value %d which is less than %d",
+			cfg.MaxSize,
+			MinimalMaxSize,
 		)
 	}
 
@@ -237,6 +261,22 @@ func (cfg *DataSetBufferSettings) Validate() error {
 			"RetryShutdownTimeout has value %s which is less than %s",
 			cfg.RetryShutdownTimeout,
 			MinimalRetryShutdownTimeout,
+		)
+	}
+
+	if cfg.MaxParallelOutgoing < MinimalMaxParallelOutgoing {
+		return fmt.Errorf(
+			"MaxParallelOutgoing has value %d which is less than %d",
+			cfg.MaxParallelOutgoing,
+			MinimalMaxParallelOutgoing,
+		)
+	}
+
+	if cfg.MaxParallelOutgoing > MaximalMaxParallelOutgoing {
+		return fmt.Errorf(
+			"MaxParallelOutgoing has value %d which is more than %d",
+			cfg.MaxParallelOutgoing,
+			MaximalMaxParallelOutgoing,
 		)
 	}
 

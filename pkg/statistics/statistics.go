@@ -34,6 +34,9 @@ import (
 
 // Statistics related to data processing
 type Statistics struct {
+	addEventsEntered atomic.Uint64
+	addEventsExited  atomic.Uint64
+
 	buffersEnqueued  atomic.Uint64
 	buffersProcessed atomic.Uint64
 	buffersDropped   atomic.Uint64
@@ -54,6 +57,9 @@ type Statistics struct {
 	meter      *metric.Meter
 	logger     *zap.Logger
 	attributes []attribute.KeyValue
+
+	cAddEventsEntered metric.Int64UpDownCounter
+	cAddEventsExited  metric.Int64UpDownCounter
 
 	cBuffersEnqueued  metric.Int64UpDownCounter
 	cBuffersProcessed metric.Int64UpDownCounter
@@ -81,6 +87,8 @@ type Statistics struct {
 func NewStatistics(config *meter_config.MeterConfig, logger *zap.Logger) (*Statistics, error) {
 	logger.Info("Initialising statistics")
 	statistics := &Statistics{
+		addEventsEntered: atomic.Uint64{},
+		addEventsExited:  atomic.Uint64{},
 		buffersEnqueued:  atomic.Uint64{},
 		buffersProcessed: atomic.Uint64{},
 		buffersDropped:   atomic.Uint64{},
@@ -138,6 +146,15 @@ func (stats *Statistics) initMetrics() error {
 	metric.WithAttributes(stats.attributes...)
 
 	err := error(nil)
+	stats.cAddEventsEntered, err = (*meter).Int64UpDownCounter(key("add_events_entered"))
+	if err != nil {
+		return err
+	}
+	stats.cAddEventsExited, err = (*meter).Int64UpDownCounter(key("add_events_left"))
+	if err != nil {
+		return err
+	}
+
 	stats.cBuffersEnqueued, err = (*meter).Int64UpDownCounter(key("buffers_enqueued"))
 	if err != nil {
 		return err
@@ -227,6 +244,14 @@ func (stats *Statistics) initMetrics() error {
 	return err
 }
 
+func (stats *Statistics) AddEventsEntered() uint64 {
+	return stats.addEventsEntered.Load()
+}
+
+func (stats *Statistics) AddEventsExited() uint64 {
+	return stats.addEventsExited.Load()
+}
+
 func (stats *Statistics) BuffersEnqueued() uint64 {
 	return stats.buffersEnqueued.Load()
 }
@@ -273,6 +298,16 @@ func (stats *Statistics) SessionsOpened() uint64 {
 
 func (stats *Statistics) SessionsClosed() uint64 {
 	return stats.sessionsClosed.Load()
+}
+
+func (stats *Statistics) AddEventsEnteredAdd(i uint64) {
+	stats.addEventsEntered.Add(i)
+	stats.add(stats.cAddEventsEntered, i)
+}
+
+func (stats *Statistics) AddEventsExitedAdd(i uint64) {
+	stats.addEventsExited.Add(i)
+	stats.add(stats.cAddEventsExited, i)
 }
 
 func (stats *Statistics) BuffersEnqueuedAdd(i uint64) {
@@ -367,6 +402,13 @@ func (stats *Statistics) add(counter metric.Int64UpDownCounter, i uint64) {
 
 // Export exports statistics related to the processing
 func (stats *Statistics) Export(processingDur time.Duration) *ExportedStatistics {
+	// log add events statistics
+	addEventsStats := AddEventsStats{
+		entered:        stats.addEventsEntered.Load(),
+		exited:         stats.addEventsExited.Load(),
+		processingTime: processingDur,
+	}
+
 	// log buffer stats
 	bProcessed := stats.buffersProcessed.Load()
 	bEnqueued := stats.buffersEnqueued.Load()
@@ -412,11 +454,36 @@ func (stats *Statistics) Export(processingDur time.Duration) *ExportedStatistics
 	}
 
 	return &ExportedStatistics{
-		Buffers:  buffersStats,
-		Events:   eventsStats,
-		Transfer: transferStats,
-		Sessions: sessionsStats,
+		AddEvents: addEventsStats,
+		Buffers:   buffersStats,
+		Events:    eventsStats,
+		Transfer:  transferStats,
+		Sessions:  sessionsStats,
 	}
+}
+
+type AddEventsStats struct {
+	entered uint64 `mapstructure:"entered"`
+	exited  uint64 `mapstructure:"exited"`
+	// processingTime is duration of the processing
+	processingTime time.Duration `mapstructure:"processingTime"`
+}
+
+func (stats AddEventsStats) Entered() uint64 {
+	return stats.entered
+}
+
+func (stats AddEventsStats) Exited() uint64 {
+	return stats.exited
+}
+
+func (stats AddEventsStats) Waiting() uint64 {
+	return stats.Entered() - stats.Exited()
+}
+
+// ProcessingTime is duration of the processing
+func (stats AddEventsStats) ProcessingTime() time.Duration {
+	return stats.processingTime
 }
 
 // QueueStats stores statistics related to the queue processing
@@ -559,6 +626,7 @@ func (stats SessionsStats) SessionsActive() uint64 {
 // ExportedStatistics store statistics related to the library execution
 // These are statistics from the beginning of the processing
 type ExportedStatistics struct {
+	AddEvents AddEventsStats `mapstructure:"addEvents"`
 	// Events stores statistics about processing events
 	Events QueueStats `mapstructure:"events"`
 	// Buffers stores statistics about processing buffers
