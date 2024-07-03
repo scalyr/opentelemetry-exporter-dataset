@@ -117,6 +117,35 @@ For the configuration option you should check [documentation](datasetexporter/RE
      make test-e2e
      ```
 
+## How To Upgrade
+
+1. Update https://github.com/scalyr/opentelemetry-collector-contrib
+   ```bash
+   cd ../opentelemetry-collector-contrib
+   # checkout main branch
+   git checkout main
+   # sync with upstream
+   gh repo sync scalyr/opentelemetry-collector-contrib -b main
+   # pull changes
+   git pull
+   # update dataset-latest branch
+   git checkout dataset-latest
+   # merge main
+   git pull
+   git merge main
+   # push changes
+   git push
+   ```
+2. Create new branch for the new version
+   ```bash
+   git checkout -b DPDV-6415-update-packages
+   ```
+3. Pull all subtress
+   ```bash
+   make subtrees-pull
+   ``` 
+   
+
 ## Testing Changes Locally
 
 Once you are familiar with building collectors binary, docker image, and executing e2e
