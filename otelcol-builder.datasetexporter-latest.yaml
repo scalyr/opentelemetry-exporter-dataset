@@ -241,4 +241,4 @@ replaces:
   - github.com/mattn/go-ieproxy => github.com/mattn/go-ieproxy v0.0.1
   # Needed to include latest version of our plugin
   - github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter v0.104.0 => github.com/scalyr/opentelemetry-collector-contrib/exporter/datasetexporter datasetexporter-latest
-  - github.com/scalyr/dataset-go v0.18.0 => ./../dataset-go
+  - github.com/scalyr/dataset-go v0.20.0 => ./../dataset-go
