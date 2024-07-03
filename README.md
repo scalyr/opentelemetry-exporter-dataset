@@ -120,22 +120,26 @@ For the configuration option you should check [documentation](datasetexporter/RE
 ## How To Upgrade
 
 1. Update https://github.com/scalyr/opentelemetry-collector-contrib
-   ```bash
-   cd ../opentelemetry-collector-contrib
-   # checkout main branch
-   git checkout main
-   # sync with upstream
-   gh repo sync scalyr/opentelemetry-collector-contrib -b main
-   # pull changes
-   git pull
-   # update dataset-latest branch
-   git checkout dataset-latest
-   # merge main
-   git pull
-   git merge main
-   # push changes
-   git push
-   ```
+   1. ```bash
+      cd ../opentelemetry-collector-contrib
+      # checkout main branch
+      git checkout main
+      # sync with upstream
+      gh repo sync scalyr/opentelemetry-collector-contrib -b main
+      # pull changes
+      git pull
+      # update dataset-latest branch
+      git checkout dataset-latest
+      # merge main
+      git pull
+      git merge main
+      # push changes
+      git push
+      ```
+   * Check in the UI, that the branches are not behind
+     * https://github.com/scalyr/opentelemetry-collector-contrib/tree/main
+     * https://github.com/scalyr/opentelemetry-collector-contrib/tree/datasetexporter-latest
+   * If they are behind use `Sync fork` button in the UI to sync them
 2. Create new branch for the new version
    ```bash
    git checkout -b DPDV-6415-update-packages
