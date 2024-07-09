@@ -7,58 +7,63 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/tag"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/multierr"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/batchpersignal"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/loadbalancingexporter/internal/metadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/exp/metrics"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/exp/metrics/identity"
 )
 
 var _ exporter.Metrics = (*metricExporterImp)(nil)
 
-type exporterMetrics map[component.Component]map[string]pmetric.Metrics
-type endpointMetrics map[string]pmetric.Metrics
-
 type metricExporterImp struct {
-	loadBalancer loadBalancer
+	loadBalancer *loadBalancer
 	routingKey   routingKey
 
 	stopped    bool
 	shutdownWg sync.WaitGroup
+	telemetry  *metadata.TelemetryBuilder
 }
 
-func newMetricsExporter(params exporter.CreateSettings, cfg component.Config) (*metricExporterImp, error) {
+func newMetricsExporter(params exporter.Settings, cfg component.Config) (*metricExporterImp, error) {
+	telemetry, err := metadata.NewTelemetryBuilder(params.TelemetrySettings)
+	if err != nil {
+		return nil, err
+	}
 	exporterFactory := otlpexporter.NewFactory()
-
-	lb, err := newLoadBalancer(params, cfg, func(ctx context.Context, endpoint string) (component.Component, error) {
+	cfFunc := func(ctx context.Context, endpoint string) (component.Component, error) {
 		oCfg := buildExporterConfig(cfg.(*Config), endpoint)
 		return exporterFactory.CreateMetricsExporter(ctx, params, &oCfg)
-	})
+	}
+
+	lb, err := newLoadBalancer(params.Logger, cfg, cfFunc, telemetry)
 	if err != nil {
 		return nil, err
 	}
 
-	metricExporter := metricExporterImp{loadBalancer: lb, routingKey: svcRouting}
+	metricExporter := metricExporterImp{
+		loadBalancer: lb,
+		routingKey:   svcRouting,
+		telemetry:    telemetry,
+	}
 
 	switch cfg.(*Config).RoutingKey {
-	case "service", "":
+	case svcRoutingStr, "":
 		// default case for empty routing key
 		metricExporter.routingKey = svcRouting
-	case "resource":
+	case resourceRoutingStr:
 		metricExporter.routingKey = resourceRouting
-	case "metric":
+	case metricNameRoutingStr:
 		metricExporter.routingKey = metricNameRouting
 	default:
 		return nil, fmt.Errorf("unsupported routing_key: %q", cfg.(*Config).RoutingKey)
@@ -75,169 +80,162 @@ func (e *metricExporterImp) Start(ctx context.Context, host component.Host) erro
 	return e.loadBalancer.Start(ctx, host)
 }
 
-func (e *metricExporterImp) Shutdown(context.Context) error {
+func (e *metricExporterImp) Shutdown(ctx context.Context) error {
+	err := e.loadBalancer.Shutdown(ctx)
 	e.stopped = true
 	e.shutdownWg.Wait()
-	return nil
+	return err
 }
 
 func (e *metricExporterImp) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
-	var errs error
-	var exp component.Component
+	var batches map[string]pmetric.Metrics
 
-	batches := batchpersignal.SplitMetrics(md)
+	switch e.routingKey {
+	case svcRouting:
+		var err error
+		batches, err = splitMetricsByResourceServiceName(md)
+		if err != nil {
+			return err
+		}
+	case resourceRouting:
+		batches = splitMetricsByResourceID(md)
+	case metricNameRouting:
+		batches = splitMetricsByMetricName(md)
+	}
 
-	exporterSegregatedMetrics := make(exporterMetrics)
-	endpointSegregatedMetrics := make(endpointMetrics)
+	// Now assign each batch to an exporter, and merge as we go
+	metricsByExporter := map[*wrappedExporter]pmetric.Metrics{}
+	exporterEndpoints := map[*wrappedExporter]string{}
 
-	for _, batch := range batches {
-		routingIds, err := routingIdentifiersFromMetrics(batch, e.routingKey)
+	for routingID, mds := range batches {
+		exp, endpoint, err := e.loadBalancer.exporterAndEndpoint([]byte(routingID))
 		if err != nil {
 			return err
 		}
 
-		for rid := range routingIds {
-			endpoint := e.loadBalancer.Endpoint([]byte(rid))
-			exp, err = e.loadBalancer.Exporter(endpoint)
-			if err != nil {
-				return err
-			}
-			_, ok := exp.(exporter.Metrics)
-			if !ok {
-				return fmt.Errorf("unable to export metrics, unexpected exporter type: expected exporter.Metrics but got %T", exp)
-			}
-
-			_, ok = endpointSegregatedMetrics[endpoint]
-			if !ok {
-				endpointSegregatedMetrics[endpoint] = pmetric.NewMetrics()
-			}
-			endpointSegregatedMetrics[endpoint] = mergeMetrics(endpointSegregatedMetrics[endpoint], batch)
-
-			_, ok = exporterSegregatedMetrics[exp]
-			if !ok {
-				exporterSegregatedMetrics[exp] = endpointMetrics{}
-			}
-			exporterSegregatedMetrics[exp][endpoint] = endpointSegregatedMetrics[endpoint]
+		expMetrics, ok := metricsByExporter[exp]
+		if !ok {
+			exp.consumeWG.Add(1)
+			expMetrics = pmetric.NewMetrics()
+			metricsByExporter[exp] = expMetrics
+			exporterEndpoints[exp] = endpoint
 		}
+
+		metrics.Merge(expMetrics, mds)
 	}
 
-	errs = multierr.Append(errs, e.consumeMetric(ctx, exporterSegregatedMetrics))
+	var errs error
+	for exp, mds := range metricsByExporter {
+		start := time.Now()
+		err := exp.ConsumeMetrics(ctx, mds)
+		duration := time.Since(start)
+
+		exp.consumeWG.Done()
+		errs = multierr.Append(errs, err)
+		e.telemetry.LoadbalancerBackendLatency.Record(ctx, duration.Milliseconds(), metric.WithAttributeSet(exp.endpointAttr))
+		if err == nil {
+			e.telemetry.LoadbalancerBackendOutcome.Add(ctx, 1, metric.WithAttributeSet(exp.successAttr))
+		} else {
+			e.telemetry.LoadbalancerBackendOutcome.Add(ctx, 1, metric.WithAttributeSet(exp.failureAttr))
+		}
+	}
 
 	return errs
 }
 
-func (e *metricExporterImp) consumeMetric(ctx context.Context, exporterSegregatedMetrics exporterMetrics) error {
-	var err error
+func splitMetricsByResourceServiceName(md pmetric.Metrics) (map[string]pmetric.Metrics, error) {
+	results := map[string]pmetric.Metrics{}
 
-	for exp, endpointMetrics := range exporterSegregatedMetrics {
-		for endpoint, md := range endpointMetrics {
-			te, _ := exp.(exporter.Metrics)
+	for i := 0; i < md.ResourceMetrics().Len(); i++ {
+		rm := md.ResourceMetrics().At(i)
 
-			start := time.Now()
-			err = te.ConsumeMetrics(ctx, md)
-			duration := time.Since(start)
+		svc, ok := rm.Resource().Attributes().Get(conventions.AttributeServiceName)
+		if !ok {
+			return nil, errors.New("unable to get service name")
+		}
 
-			if err == nil {
-				_ = stats.RecordWithTags(
-					ctx,
-					[]tag.Mutator{tag.Upsert(endpointTagKey, endpoint), successTrueMutator},
-					mBackendLatency.M(duration.Milliseconds()))
-			} else {
-				_ = stats.RecordWithTags(
-					ctx,
-					[]tag.Mutator{tag.Upsert(endpointTagKey, endpoint), successFalseMutator},
-					mBackendLatency.M(duration.Milliseconds()))
-			}
+		newMD := pmetric.NewMetrics()
+		rmClone := newMD.ResourceMetrics().AppendEmpty()
+		rm.CopyTo(rmClone)
+
+		key := svc.Str()
+		existing, ok := results[key]
+		if ok {
+			metrics.Merge(existing, newMD)
+		} else {
+			results[key] = newMD
 		}
 	}
 
-	return err
+	return results, nil
 }
 
-func routingIdentifiersFromMetrics(mds pmetric.Metrics, key routingKey) (map[string]bool, error) {
-	ids := make(map[string]bool)
+func splitMetricsByResourceID(md pmetric.Metrics) map[string]pmetric.Metrics {
+	results := map[string]pmetric.Metrics{}
 
-	// no need to test "empty labels"
-	// no need to test "empty resources"
+	for i := 0; i < md.ResourceMetrics().Len(); i++ {
+		rm := md.ResourceMetrics().At(i)
 
-	rs := mds.ResourceMetrics()
-	if rs.Len() == 0 {
-		return nil, errors.New("empty resource metrics")
+		newMD := pmetric.NewMetrics()
+		rmClone := newMD.ResourceMetrics().AppendEmpty()
+		rm.CopyTo(rmClone)
+
+		key := identity.OfResource(rm.Resource()).String()
+		existing, ok := results[key]
+		if ok {
+			metrics.Merge(existing, newMD)
+		} else {
+			results[key] = newMD
+		}
 	}
 
-	ils := rs.At(0).ScopeMetrics()
-	if ils.Len() == 0 {
-		return nil, errors.New("empty scope metrics")
-	}
+	return results
+}
 
-	metrics := ils.At(0).Metrics()
-	if metrics.Len() == 0 {
-		return nil, errors.New("empty metrics")
-	}
+func splitMetricsByMetricName(md pmetric.Metrics) map[string]pmetric.Metrics {
+	results := map[string]pmetric.Metrics{}
 
-	for i := 0; i < rs.Len(); i++ {
-		resource := rs.At(i).Resource()
-		switch key {
-		default:
-		case svcRouting, traceIDRouting:
-			svc, ok := resource.Attributes().Get(conventions.AttributeServiceName)
-			if !ok {
-				return nil, errors.New("unable to get service name")
-			}
-			ids[svc.Str()] = true
-		case metricNameRouting:
-			sm := rs.At(i).ScopeMetrics()
-			for j := 0; j < sm.Len(); j++ {
-				metrics := sm.At(j).Metrics()
-				for k := 0; k < metrics.Len(); k++ {
-					md := metrics.At(k)
-					rKey := metricRoutingKey(md)
-					ids[rKey] = true
-				}
-			}
-		case resourceRouting:
-			sm := rs.At(i).ScopeMetrics()
-			for j := 0; j < sm.Len(); j++ {
-				metrics := sm.At(j).Metrics()
-				for k := 0; k < metrics.Len(); k++ {
-					md := metrics.At(k)
-					rKey := resourceRoutingKey(md, resource.Attributes())
-					ids[rKey] = true
+	for i := 0; i < md.ResourceMetrics().Len(); i++ {
+		rm := md.ResourceMetrics().At(i)
+
+		for j := 0; j < rm.ScopeMetrics().Len(); j++ {
+			sm := rm.ScopeMetrics().At(j)
+
+			for k := 0; k < sm.Metrics().Len(); k++ {
+				m := sm.Metrics().At(k)
+
+				newMD, mClone := cloneMetricWithoutType(rm, sm, m)
+				m.CopyTo(mClone)
+
+				key := m.Name()
+				existing, ok := results[key]
+				if ok {
+					metrics.Merge(existing, newMD)
+				} else {
+					results[key] = newMD
 				}
 			}
 		}
 	}
 
-	return ids, nil
-
+	return results
 }
 
-// maintain
-func sortedMapAttrs(attrs pcommon.Map) []string {
-	keys := make([]string, 0)
-	for k := range attrs.AsRaw() {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+func cloneMetricWithoutType(rm pmetric.ResourceMetrics, sm pmetric.ScopeMetrics, m pmetric.Metric) (md pmetric.Metrics, mClone pmetric.Metric) {
+	md = pmetric.NewMetrics()
 
-	attrsHash := make([]string, 0)
-	for _, k := range keys {
-		attrsHash = append(attrsHash, k)
-		if v, ok := attrs.Get(k); ok {
-			attrsHash = append(attrsHash, v.AsString())
-		}
-	}
-	return attrsHash
-}
+	rmClone := md.ResourceMetrics().AppendEmpty()
+	rm.Resource().CopyTo(rmClone.Resource())
+	rmClone.SetSchemaUrl(rm.SchemaUrl())
 
-func resourceRoutingKey(md pmetric.Metric, attrs pcommon.Map) string {
-	attrsHash := sortedMapAttrs(attrs)
-	attrsHash = append(attrsHash, md.Name())
-	routingRef := strings.Join(attrsHash, "")
+	smClone := rmClone.ScopeMetrics().AppendEmpty()
+	sm.Scope().CopyTo(smClone.Scope())
+	smClone.SetSchemaUrl(sm.SchemaUrl())
 
-	return routingRef
-}
+	mClone = smClone.Metrics().AppendEmpty()
+	mClone.SetName(m.Name())
+	mClone.SetDescription(m.Description())
+	mClone.SetUnit(m.Unit())
 
-func metricRoutingKey(md pmetric.Metric) string {
-	return md.Name()
+	return md, mClone
 }

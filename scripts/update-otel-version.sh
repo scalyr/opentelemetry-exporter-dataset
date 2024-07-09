@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
       ;;
 
     -h|--help)
-      echo "Script for updating otel version in scripts"
+      echo "Script for updating otel version in configs"
       exit 0
       ;;
     *)

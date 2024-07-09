@@ -22,7 +22,8 @@ func TestLoadConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	factories.Connectors[metadata.Type] = NewFactory()
-
+	// https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/33594
+	// nolint:staticcheck
 	cfg, err := otelcoltest.LoadConfigAndValidate(filepath.Join("testdata", "service-graph-connector-config.yaml"), factories)
 
 	// Verify
@@ -36,8 +37,9 @@ func TestLoadConfig(t *testing.T) {
 				TTL:      time.Second,
 				MaxItems: 10,
 			},
-			CacheLoop:           time.Minute,
-			StoreExpirationLoop: 2 * time.Second,
+			CacheLoop:             time.Minute,
+			StoreExpirationLoop:   2 * time.Second,
+			DatabaseNameAttribute: "db.name",
 		},
 		cfg.Connectors[component.NewID(metadata.Type)],
 	)

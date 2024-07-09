@@ -1,4 +1,14 @@
 # Release Notes
+
+## 0.20.0
+
+* fix: fix SIGSEV that was caused by releasing resources associated with inactive sessions
+* feat: make number of parallel outgoing requests configurable
+
+## 0.19.0
+
+* fix: retry also when server is not returning JSON
+
 ## 0.18.0
 
 * break: drop support for Go 1.20 and add testing for Go 1.22

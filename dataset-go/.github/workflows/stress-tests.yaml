@@ -1,0 +1,59 @@
+name: Stress Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 6 * * *'
+
+permissions:
+  actions: write  # Needed for skip-duplicate-jobs job
+  contents: read
+
+jobs:
+  # Special job which automatically cancels old runs for the same branch, prevents runs for the
+  # same file set which has already passed, etc.
+  pre_job:
+    name: Skip Duplicate Jobs Pre Job
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf # v5.3.1
+        with:
+          cancel_others: 'true'
+          github_token: ${{ github.token }}
+
+  stress-tests:
+    strategy:
+      # keep in sync with https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/.github/workflows/build-and-test.yml#L237
+      matrix:
+        go: ['1.21', '1.22']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: Run Stress Test - Each bucket used once
+        run: |
+          ./scripts/run-stress-test.sh 10000 10000
+      - name: Run Stress Test - Max congestion
+        run: |
+          ./scripts/run-stress-test.sh 10000 -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.os }}-${{ matrix.go }}
+          path: examples/stress/*.log

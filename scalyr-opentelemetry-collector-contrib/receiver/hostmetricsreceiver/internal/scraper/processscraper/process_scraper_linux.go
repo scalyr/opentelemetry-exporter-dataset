@@ -8,7 +8,7 @@ package processscraper // import "github.com/open-telemetry/opentelemetry-collec
 import (
 	"context"
 
-	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v4/cpu"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/processscraper/internal/metadata"
@@ -43,6 +43,15 @@ func getProcessExecutable(ctx context.Context, proc processHandle) (string, erro
 	}
 
 	return exe, nil
+}
+
+func getProcessCgroup(ctx context.Context, proc processHandle) (string, error) {
+	cgroup, err := proc.CgroupWithContext(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return cgroup, nil
 }
 
 func getProcessCommand(ctx context.Context, proc processHandle) (*commandMetadata, error) {

@@ -51,6 +51,30 @@ var (
 	}
 )
 
+func TestAddEventsEntered(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
+			require.Nil(t, err)
+			v := uint64(rand.Int())
+			stats.AddEventsEnteredAdd(v)
+			assert.Equal(t, v, stats.AddEventsEntered())
+		})
+	}
+}
+
+func TestAddEventsExited(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
+			require.Nil(t, err)
+			v := uint64(rand.Int())
+			stats.AddEventsExitedAdd(v)
+			assert.Equal(t, v, stats.AddEventsExited())
+		})
+	}
+}
+
 func TestBuffersEnqueued(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
@@ -199,9 +223,34 @@ func TestSessionsClosed(t *testing.T) {
 	}
 }
 
+func TestPayloadSizeRecord(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
+			require.Nil(t, err)
+			v := int64(rand.Int())
+			stats.PayloadSizeRecord(v)
+		})
+	}
+}
+
+func TestResponseTimeRecord(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
+			require.Nil(t, err)
+			v := int64(rand.Int())
+			stats.ResponseTimeRecord(time.Duration(v))
+		})
+	}
+}
+
 func TestExport(t *testing.T) {
 	stats, err := NewStatistics(nil, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
+
+	stats.AddEventsEnteredAdd(5000)
+	stats.AddEventsExitedAdd(500)
 
 	stats.BuffersEnqueuedAdd(1000)
 	stats.BuffersProcessedAdd(100)
@@ -221,6 +270,11 @@ func TestExport(t *testing.T) {
 
 	exp := stats.Export(time.Second)
 	assert.Equal(t, &ExportedStatistics{
+		AddEvents: AddEventsStats{
+			entered:        5000,
+			exited:         500,
+			processingTime: time.Second,
+		},
 		Buffers: QueueStats{
 			enqueued:       1000,
 			processed:      100,
@@ -246,6 +300,11 @@ func TestExport(t *testing.T) {
 			sessionsClosed: 400,
 		},
 	}, exp)
+
+	assert.Equal(t, exp.AddEvents.Entered(), uint64(5000))
+	assert.Equal(t, exp.AddEvents.Exited(), uint64(500))
+	assert.Equal(t, exp.AddEvents.Waiting(), uint64(4500))
+	assert.Equal(t, exp.AddEvents.ProcessingTime(), time.Second)
 
 	assert.Equal(t, exp.Buffers.Enqueued(), uint64(1000))
 	assert.Equal(t, exp.Buffers.Processed(), uint64(100))

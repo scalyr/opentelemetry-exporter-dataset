@@ -44,10 +44,10 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	const MaxDelay = 200 * time.Millisecond
 	const PurgeOlderThan = 15 * MaxDelay
 
-	const Cycles = 3
-	const MaxBatchCount = 400
-	const LogsPerBatch = 500
-	const ExpectedLogs = uint64(Cycles * MaxBatchCount * LogsPerBatch)
+	const Cycles = 5
+	const MaxBatchCount = 40
+	const LogsPerBatch = 50
+	const ExpectedLogs = Cycles * MaxBatchCount * LogsPerBatch
 
 	attempt := atomic.Uint64{}
 	lastCall := atomic.Int64{}
@@ -104,6 +104,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
 			RetryShutdownTimeout:     50 * RetryBase,
+			MaxParallelOutgoing:      100,
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
@@ -120,7 +121,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 				attrs := make(map[string]interface{})
 				attrs["batch"] = batchKey
 				attrs["body.str"] = key
-				attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
+				attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(200))
 
 				event := &add_events.Event{
 					Thread: "5",
@@ -169,11 +170,11 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	assert.Nil(t, err, err)
 
 	stats := sc.Statistics()
-	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Enqueued())
-	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Processed())
-	assert.Equal(t, uint64(0), stats.Events.Waiting())
-	assert.Equal(t, uint64(0), stats.Events.Dropped())
-	assert.Equal(t, uint64(0), stats.Events.Broken())
+	assert.Equal(t, ExpectedLogs, int(stats.Events.Enqueued()))
+	assert.Equal(t, ExpectedLogs, int(stats.Events.Processed()))
+	assert.Equal(t, 0, int(stats.Events.Waiting()))
+	assert.Equal(t, 0, int(stats.Events.Dropped()))
+	assert.Equal(t, 0, int(stats.Events.Broken()))
 	assert.Equal(t, 1.0, stats.Events.SuccessRate())
 
 	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
@@ -183,11 +184,11 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 
 	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
 
-	assert.Equal(t, uint64(Cycles*MaxBatchCount), stats.Sessions.SessionsOpened())
+	assert.Equal(t, Cycles*MaxBatchCount, int(stats.Sessions.SessionsOpened()))
 	assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
 	assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 
-	assert.Equal(t, seenKeys, expectedKeys)
-	assert.Equal(t, int(processedEvents.Load()), int(ExpectedLogs), "processed items")
-	assert.Equal(t, int(len(seenKeys)), int(ExpectedLogs), "unique items")
+	assert.Equal(t, expectedKeys, seenKeys)
+	assert.Equal(t, ExpectedLogs, int(processedEvents.Load()), "processed items")
+	assert.Equal(t, ExpectedLogs, len(seenKeys), "unique items")
 }

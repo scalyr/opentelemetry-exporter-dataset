@@ -3,13 +3,12 @@ module client
 go 1.21
 
 require (
-	github.com/scalyr/dataset-go v0.17.0
+	github.com/scalyr/dataset-go v0.18.0
 	go.uber.org/zap v1.27.0
 )
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
-	github.com/cskr/pubsub v1.0.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	go.opentelemetry.io/otel v1.27.0 // indirect
 	go.opentelemetry.io/otel/metric v1.27.0 // indirect
@@ -17,4 +16,4 @@ require (
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
 )
 
-replace github.com/scalyr/dataset-go v0.17.0 => ./../..
+replace github.com/scalyr/dataset-go v0.18.0 => ./../..

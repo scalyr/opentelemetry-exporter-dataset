@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	psnet "github.com/shirou/gopsutil/v3/net"
-	"github.com/shirou/gopsutil/v3/process"
+	psnet "github.com/shirou/gopsutil/v4/net"
+	"github.com/shirou/gopsutil/v4/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
@@ -510,7 +510,7 @@ func TestCollectEndpoints(t *testing.T) {
 			newProc: func(pid int32) (*process.Process, error) {
 				return &process.Process{Pid: pid}, nil
 			},
-			procDetails: func(proc *process.Process) (*processDetails, error) {
+			procDetails: func(_ *process.Process) (*processDetails, error) {
 				return nil, errors.New("always fail")
 			},
 			want: []observer.Endpoint{},

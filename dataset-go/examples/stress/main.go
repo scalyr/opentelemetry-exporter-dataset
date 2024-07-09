@@ -39,8 +39,15 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	MaxLifeTimeMultiplier    = 50
+	PurgeOlderThanMultiplier = 150
+)
+
 func main() {
 	eventsCount := flag.Int("events", 1e5, "number of events")
+	bucketsCount := flag.Int("buckets", 1e5, "number of buckets")
+	parallel := flag.Int("parallel", 20, "number of parallel outgoing connections")
 	sleep := flag.Duration("sleep", 10*time.Millisecond, "sleep between sending two events")
 	logFile := flag.String("log", fmt.Sprintf("log-%s-%d.log", version.Version, time.Now().UnixMilli()), "log file for stats")
 	logEvery := flag.Duration("log-every", time.Second, "how often log statistics")
@@ -51,8 +58,25 @@ func main() {
 	logger := zap.Must(zap.NewDevelopment())
 
 	// log input parameters
-	logger.Info("Running stress test with:",
+	logger.Info("Running stress test - input:",
 		zap.Int("events", *eventsCount),
+		zap.Int("buckets", *bucketsCount),
+		zap.Int("parallel", *parallel),
+		zap.Duration("sleep", *sleep),
+		zap.String("log", *logFile),
+		zap.Duration("log-every", *logEvery),
+		zap.Bool("pprof", *enablePProf),
+		zap.String("version", version.Version),
+	)
+
+	if *bucketsCount == -1 {
+		*bucketsCount = PurgeOlderThanMultiplier
+	}
+
+	logger.Info("Running stress test - adjusted:",
+		zap.Int("events", *eventsCount),
+		zap.Int("buckets", *bucketsCount),
+		zap.Int("parallel", *parallel),
 		zap.Duration("sleep", *sleep),
 		zap.String("log", *logFile),
 		zap.Duration("log-every", *logEvery),
@@ -61,6 +85,8 @@ func main() {
 	)
 
 	if *enablePProf {
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
 		go func() {
 			http.ListenAndServe("localhost:8080", nil)
 		}()
@@ -82,7 +108,12 @@ func main() {
 	defer server.Close()
 
 	cfg := config.NewDefaultDataSetConfig()
-	bufferCfg, err := cfg.BufferSettings.WithOptions(buffer_config.WithGroupBy([]string{"body.str"}))
+	bufferCfg, err := cfg.BufferSettings.WithOptions(
+		buffer_config.WithGroupBy([]string{"body.str"}),
+		buffer_config.WithMaxLifetime(MaxLifeTimeMultiplier**sleep),
+		buffer_config.WithPurgeOlderThan(PurgeOlderThanMultiplier**sleep),
+		buffer_config.WithMaxParallelOutgoing(*parallel),
+	)
 	check(err)
 	cfgUpdated, err := cfg.WithOptions(
 		config.WithBufferSettings(*bufferCfg),
@@ -102,9 +133,20 @@ func main() {
 
 	go logStats(dataSetClient, &apiCalls, *logFile, *logEvery)
 
+	// start sending events
+	logger.Info(
+		"STRESS - Start adding events",
+	)
 	for i := 0; i < *eventsCount; i++ {
 		batch := make([]*add_events.EventBundle, 0)
-		key := fmt.Sprintf("%d", i)
+		key := fmt.Sprintf("%d", i%*bucketsCount)
+
+		logger.Debug(
+			"STRESS - Creating event",
+			zap.Int("i", i),
+			zap.String("key", key),
+		)
+
 		attrs := make(map[string]interface{})
 		attrs["body.str"] = key
 		attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
@@ -129,12 +171,21 @@ func main() {
 		eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
 
 		batch = append(batch, eventBundle)
-		err := dataSetClient.AddEvents(batch)
-		check(err)
+		go func(batch []*add_events.EventBundle) {
+			err := dataSetClient.AddEvents(batch)
+			check(err)
+		}(batch)
+
+		if i%*bucketsCount == 0 {
+			time.Sleep(PurgeOlderThanMultiplier * *sleep)
+		}
 		time.Sleep(*sleep)
 	}
 
 	// wait until everything is processed
+	logger.Info(
+		"STRESS - Wait for everything to finish",
+	)
 	for {
 		processed := uint64(0)
 		stats := dataSetClient.Statistics()
@@ -152,6 +203,9 @@ func main() {
 	}
 
 	// wait for extra 1 minute to see how the memory will behave
+	logger.Info(
+		"STRESS - Extra sleep at the end",
+	)
 	extraSleepFor := 60
 	for i := 0; i <= extraSleepFor; i++ {
 		time.Sleep(time.Second)
@@ -175,27 +229,53 @@ func logStats(client *client.DataSetClient, apiCalls *atomic.Uint64, logFile str
 	f, err := os.Create(logFile)
 	check(err)
 
-	_, err = f.WriteString("i\tTime\tEnqueued\tProcessed\tCalls\tHeapAlloc\tHeapSys\tMallocs\tFrees\tHeapObjects\tVersion\n")
+	_, err = f.WriteString("i\tTime\tEvEnqueued\tEvProcessed\tEvBroken\tEvDropped\tBufEnqueued\tBufProcessed\tBufBroken\tBufDropped\tSesOpened\tSesClosed\tCalls\tHeapAlloc\tHeapSys\tMallocs\tFrees\tHeapObjects\tVersion\n")
 	check(err)
 
 	for i := 0; ; i++ {
 		var memStats runtime.MemStats
 		runtime.ReadMemStats(&memStats)
-		enqueued := uint64(0)
-		processed := uint64(0)
+		evEnqueued := uint64(0)
+		evProcessed := uint64(0)
+		evDropped := uint64(0)
+		evBroken := uint64(0)
+		bufEnqueued := uint64(0)
+		bufProcessed := uint64(0)
+		bufDropped := uint64(0)
+		bufBroken := uint64(0)
+		sesOpened := uint64(0)
+		sesClosed := uint64(0)
 		clientStats := client.Statistics()
 		if clientStats != nil {
-			enqueued = clientStats.Events.Enqueued()
-			processed = clientStats.Events.Processed()
+			evEnqueued = clientStats.Events.Enqueued()
+			evProcessed = clientStats.Events.Processed()
+			evDropped = clientStats.Events.Dropped()
+			evBroken = clientStats.Events.Broken()
+
+			bufEnqueued = clientStats.Buffers.Enqueued()
+			bufProcessed = clientStats.Buffers.Processed()
+			bufDropped = clientStats.Buffers.Dropped()
+			bufBroken = clientStats.Buffers.Broken()
+
+			sesOpened = clientStats.Sessions.SessionsOpened()
+			sesClosed = clientStats.Sessions.SessionsClosed()
 		}
 
 		_, err := f.WriteString(
 			fmt.Sprintf(
-				"%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n",
+				"%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n",
 				i,
 				time.Now().Unix(),
-				enqueued,
-				processed,
+				evEnqueued,
+				evProcessed,
+				evDropped,
+				evBroken,
+				bufEnqueued,
+				bufProcessed,
+				bufDropped,
+				bufBroken,
+				sesOpened,
+				sesClosed,
 				apiCalls.Load(),
 				memStats.HeapAlloc,
 				memStats.HeapSys,

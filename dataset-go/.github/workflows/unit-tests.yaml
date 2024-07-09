@@ -56,9 +56,11 @@ jobs:
         run: |
           go mod vendor
       - name: Code tests
+        timeout-minutes: 15
         run: |
           make test
       - name: Run Tests Many Times
+        timeout-minutes: 30
         # Run test multiple times to check for flaky tests
         if: github.ref_name == 'main'
         run: |

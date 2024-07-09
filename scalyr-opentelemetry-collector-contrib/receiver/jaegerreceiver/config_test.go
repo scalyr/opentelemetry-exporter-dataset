@@ -34,9 +34,9 @@ func TestLoadConfig(t *testing.T) {
 			expected: &Config{
 				Protocols: Protocols{
 					GRPC: &configgrpc.ServerConfig{
-						NetAddr: confignet.NetAddr{
+						NetAddr: confignet.AddrConfig{
 							Endpoint:  "localhost:9876",
-							Transport: "tcp",
+							Transport: confignet.TransportTypeTCP,
 						},
 					},
 					ThriftHTTP: &confighttp.ServerConfig{
@@ -68,20 +68,20 @@ func TestLoadConfig(t *testing.T) {
 			expected: &Config{
 				Protocols: Protocols{
 					GRPC: &configgrpc.ServerConfig{
-						NetAddr: confignet.NetAddr{
-							Endpoint:  "0.0.0.0:14250",
-							Transport: "tcp",
+						NetAddr: confignet.AddrConfig{
+							Endpoint:  "localhost:14250",
+							Transport: confignet.TransportTypeTCP,
 						},
 					},
 					ThriftHTTP: &confighttp.ServerConfig{
-						Endpoint: "0.0.0.0:14268",
+						Endpoint: "localhost:14268",
 					},
 					ThriftCompact: &ProtocolUDP{
-						Endpoint:        "0.0.0.0:6831",
+						Endpoint:        "localhost:6831",
 						ServerConfigUDP: defaultServerConfigUDP(),
 					},
 					ThriftBinary: &ProtocolUDP{
-						Endpoint:        "0.0.0.0:6832",
+						Endpoint:        "localhost:6832",
 						ServerConfigUDP: defaultServerConfigUDP(),
 					},
 				},
@@ -92,13 +92,13 @@ func TestLoadConfig(t *testing.T) {
 			expected: &Config{
 				Protocols: Protocols{
 					GRPC: &configgrpc.ServerConfig{
-						NetAddr: confignet.NetAddr{
+						NetAddr: confignet.AddrConfig{
 							Endpoint:  "localhost:9876",
-							Transport: "tcp",
+							Transport: confignet.TransportTypeTCP,
 						},
 					},
 					ThriftCompact: &ProtocolUDP{
-						Endpoint:        "0.0.0.0:6831",
+						Endpoint:        "localhost:6831",
 						ServerConfigUDP: defaultServerConfigUDP(),
 					},
 				},
@@ -109,12 +109,12 @@ func TestLoadConfig(t *testing.T) {
 			expected: &Config{
 				Protocols: Protocols{
 					GRPC: &configgrpc.ServerConfig{
-						NetAddr: confignet.NetAddr{
+						NetAddr: confignet.AddrConfig{
 							Endpoint:  "localhost:9876",
-							Transport: "tcp",
+							Transport: confignet.TransportTypeTCP,
 						},
-						TLSSetting: &configtls.TLSServerSetting{
-							TLSSetting: configtls.TLSSetting{
+						TLSSetting: &configtls.ServerConfig{
+							Config: configtls.Config{
 								CertFile: "/test.crt",
 								KeyFile:  "/test.key",
 							},
@@ -135,7 +135,7 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
 			assert.NoError(t, component.ValidateConfig(cfg))
 			assert.Equal(t, tt.expected, cfg)
@@ -151,17 +151,17 @@ func TestFailedLoadConfig(t *testing.T) {
 
 	sub, err := cm.Sub(component.NewIDWithName(metadata.Type, "typo_default_proto_config").String())
 	require.NoError(t, err)
-	err = component.UnmarshalConfig(sub, cfg)
+	err = sub.Unmarshal(cfg)
 	assert.EqualError(t, err, "1 error(s) decoding:\n\n* 'protocols' has invalid keys: thrift_htttp")
 
 	sub, err = cm.Sub(component.NewIDWithName(metadata.Type, "bad_proto_config").String())
 	require.NoError(t, err)
-	err = component.UnmarshalConfig(sub, cfg)
+	err = sub.Unmarshal(cfg)
 	assert.EqualError(t, err, "1 error(s) decoding:\n\n* 'protocols' has invalid keys: thrift_htttp")
 
 	sub, err = cm.Sub(component.NewIDWithName(metadata.Type, "empty").String())
 	require.NoError(t, err)
-	err = component.UnmarshalConfig(sub, cfg)
+	err = sub.Unmarshal(cfg)
 	assert.EqualError(t, err, "empty config for Jaeger receiver")
 }
 
@@ -202,9 +202,9 @@ func TestInvalidConfig(t *testing.T) {
 			desc: "grpc-invalid-host",
 			apply: func(cfg *Config) {
 				cfg.GRPC = &configgrpc.ServerConfig{
-					NetAddr: confignet.NetAddr{
+					NetAddr: confignet.AddrConfig{
 						Endpoint:  "1234",
-						Transport: "tcp",
+						Transport: confignet.TransportTypeTCP,
 					},
 				}
 			},
