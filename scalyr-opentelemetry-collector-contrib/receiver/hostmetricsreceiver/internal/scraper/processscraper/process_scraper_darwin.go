@@ -9,7 +9,7 @@ import (
 	"context"
 	"regexp"
 
-	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v4/cpu"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/processscraper/internal/metadata"
@@ -35,6 +35,10 @@ func getProcessName(ctx context.Context, proc processHandle, _ string) (string, 
 	}
 
 	return name, nil
+}
+
+func getProcessCgroup(_ context.Context, _ processHandle) (string, error) {
+	return "", nil
 }
 
 func getProcessExecutable(ctx context.Context, proc processHandle) (string, error) {

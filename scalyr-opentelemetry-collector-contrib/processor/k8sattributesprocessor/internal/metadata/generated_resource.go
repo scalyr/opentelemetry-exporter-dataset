@@ -119,10 +119,24 @@ func (rb *ResourceBuilder) SetK8sNodeName(val string) {
 	}
 }
 
+// SetK8sNodeUID sets provided value as "k8s.node.uid" attribute.
+func (rb *ResourceBuilder) SetK8sNodeUID(val string) {
+	if rb.config.K8sNodeUID.Enabled {
+		rb.res.Attributes().PutStr("k8s.node.uid", val)
+	}
+}
+
 // SetK8sPodHostname sets provided value as "k8s.pod.hostname" attribute.
 func (rb *ResourceBuilder) SetK8sPodHostname(val string) {
 	if rb.config.K8sPodHostname.Enabled {
 		rb.res.Attributes().PutStr("k8s.pod.hostname", val)
+	}
+}
+
+// SetK8sPodIP sets provided value as "k8s.pod.ip" attribute.
+func (rb *ResourceBuilder) SetK8sPodIP(val string) {
+	if rb.config.K8sPodIP.Enabled {
+		rb.res.Attributes().PutStr("k8s.pod.ip", val)
 	}
 }
 

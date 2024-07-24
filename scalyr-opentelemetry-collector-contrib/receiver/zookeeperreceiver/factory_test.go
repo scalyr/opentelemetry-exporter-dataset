@@ -28,7 +28,7 @@ func TestFactory(t *testing.T) {
 	// Assert defaults.
 	assert.Equal(t, 10*time.Second, rCfg.CollectionInterval)
 	assert.Equal(t, 10*time.Second, rCfg.Timeout)
-	assert.Equal(t, "0.0.0.0:2181", rCfg.Endpoint)
+	assert.Equal(t, "localhost:2181", rCfg.Endpoint)
 
 	tests := []struct {
 		name    string
@@ -47,7 +47,7 @@ func TestFactory(t *testing.T) {
 		{
 			name: "Invalid timeout",
 			config: &Config{
-				TCPAddr: confignet.TCPAddr{
+				TCPAddrConfig: confignet.TCPAddrConfig{
 					Endpoint: ":2181",
 				},
 			},
@@ -59,7 +59,7 @@ func TestFactory(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			r, err := f.CreateMetricsReceiver(
 				context.Background(),
-				receivertest.NewNopCreateSettings(),
+				receivertest.NewNopSettings(),
 				test.config,
 				consumertest.NewNop(),
 			)

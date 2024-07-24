@@ -47,12 +47,14 @@ Make sure to provide the appropriate server host value in the `serverHost` attri
 
 - `debug` (default = false): Adds `session_key` to the server fields. It's useful for debugging throughput issues.
 - `buffer`:
-  - `max_lifetime` (default = 5s): The maximum delay between sending batches from the same source.
+  - `max_lifetime` (default = 5s): The maximum delay between sending batches from the same session.
+  - `purge_older_than` (default = 30s): The maximum delay between receiving data for the same session after which resources associated with it are purged.
   - `group_by` (default = []): The list of attributes based on which events should be grouped. They are moved from the event attributes to the session info and shown as server fields in the UI.
   - `retry_initial_interval` (default = 5s): Time to wait after the first failure before retrying.
   - `retry_max_interval` (default = 30s): Is the upper bound on backoff.
   - `retry_max_elapsed_time` (default = 300s): Is the maximum amount of time spent trying to send a buffer.
   - `retry_shutdown_timeout` (default = 30s): The maximum time for which it will try to send data to the DataSet during shutdown. This value should be shorter than container's grace period.
+  - `max_parallel_outgoing` (default = 100): The maximum number of parallel outgoing requests.
 - `logs`:
     - `export_resource_info_on_event` (default = false): Include LogRecord resource information (if available) on the DataSet event.
     - `export_resource_prefix` (default = 'resource.attributes.'): A prefix string for the resource, if `export_resource_info_on_event` is enabled.
@@ -307,7 +309,7 @@ To enable metrics you have to:
 ### Available Metrics
 
 Available metrics contain `dataset` in their name. There are counters related to the
-number of processed events (`events`), buffers (`buffer`), and transferred bytes (`bytes`).
+number of processed events (`events`), buffers (`buffer`), sessions (`sessions`), and transferred bytes (`bytes`).
 There are also histograms related to response times (`responseTime`) and payload size (`payloadSize`).
 
 There are several counters related to events/buffers:

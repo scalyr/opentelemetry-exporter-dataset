@@ -38,12 +38,12 @@ type kubernetesprocessor struct {
 	podIgnore         kube.Excludes
 }
 
-func (kp *kubernetesprocessor) initKubeClient(logger *zap.Logger, kubeClient kube.ClientProvider) error {
+func (kp *kubernetesprocessor) initKubeClient(set component.TelemetrySettings, kubeClient kube.ClientProvider) error {
 	if kubeClient == nil {
 		kubeClient = kube.New
 	}
 	if !kp.passthroughMode {
-		kc, err := kubeClient(logger, kp.apiConfig, kp.rules, kp.filters, kp.podAssociations, kp.podIgnore, nil, nil, nil, nil)
+		kc, err := kubeClient(set, kp.apiConfig, kp.rules, kp.filters, kp.podAssociations, kp.podIgnore, nil, nil, nil, nil)
 		if err != nil {
 			return err
 		}
@@ -64,7 +64,7 @@ func (kp *kubernetesprocessor) Start(_ context.Context, _ component.Host) error 
 
 	// This might have been set by an option already
 	if kp.kc == nil {
-		err := kp.initKubeClient(kp.logger, kubeClientProvider)
+		err := kp.initKubeClient(kp.telemetrySettings, kubeClientProvider)
 		if err != nil {
 			kp.telemetrySettings.ReportStatus(component.NewFatalErrorEvent(err))
 			return nil
@@ -166,6 +166,12 @@ func (kp *kubernetesprocessor) processResource(ctx context.Context, resource pco
 				resource.Attributes().PutStr(key, val)
 			}
 		}
+		nodeUID := kp.getUIDForPodsNode(nodeName)
+		if nodeUID != "" {
+			if _, found := resource.Attributes().Get(conventions.AttributeK8SNodeUID); !found {
+				resource.Attributes().PutStr(conventions.AttributeK8SNodeUID, nodeUID)
+			}
+		}
 	}
 }
 
@@ -261,6 +267,14 @@ func (kp *kubernetesprocessor) getAttributesForPodsNode(nodeName string) map[str
 		return nil
 	}
 	return node.Attributes
+}
+
+func (kp *kubernetesprocessor) getUIDForPodsNode(nodeName string) string {
+	node, ok := kp.kc.GetNode(nodeName)
+	if !ok {
+		return ""
+	}
+	return node.NodeUID
 }
 
 // intFromAttribute extracts int value from an attribute stored as string or int

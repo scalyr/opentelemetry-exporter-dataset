@@ -11,8 +11,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/featuregate"
-	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/emittest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/fingerprint"
@@ -22,7 +23,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/helper"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/operatortest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/parser/regex"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/testutil"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -38,6 +38,9 @@ func TestNewConfig(t *testing.T) {
 	assert.False(t, cfg.IncludeFilePath)
 	assert.False(t, cfg.IncludeFileNameResolved)
 	assert.False(t, cfg.IncludeFilePathResolved)
+	assert.False(t, cfg.IncludeFileOwnerName)
+	assert.False(t, cfg.IncludeFileOwnerGroupName)
+	assert.False(t, cfg.IncludeFileRecordNumber)
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -449,7 +452,7 @@ func TestBuild(t *testing.T) {
 	}{
 		{
 			"Basic",
-			func(cfg *Config) {},
+			func(_ *Config) {},
 			require.NoError,
 			func(t *testing.T, m *Manager) {
 				require.Equal(t, m.pollInterval, 10*time.Millisecond)
@@ -486,7 +489,7 @@ func TestBuild(t *testing.T) {
 				cfg.SplitConfig.LineStartPattern = "START.*"
 			},
 			require.NoError,
-			func(t *testing.T, f *Manager) {},
+			func(_ *testing.T, _ *Manager) {},
 		},
 		{
 			"MultilineConfiguredEndPattern",
@@ -494,7 +497,7 @@ func TestBuild(t *testing.T) {
 				cfg.SplitConfig.LineEndPattern = "END.*"
 			},
 			require.NoError,
-			func(t *testing.T, f *Manager) {},
+			func(_ *testing.T, _ *Manager) {},
 		},
 		{
 			"InvalidEncoding",
@@ -515,9 +518,9 @@ func TestBuild(t *testing.T) {
 		},
 		{
 			"NoLineStartOrEnd",
-			func(cfg *Config) {},
+			func(_ *Config) {},
 			require.NoError,
-			func(t *testing.T, f *Manager) {},
+			func(_ *testing.T, _ *Manager) {},
 		},
 		{
 			"InvalidLineStartRegex",
@@ -616,7 +619,7 @@ func TestBuild(t *testing.T) {
 				}
 			},
 			require.NoError,
-			func(t *testing.T, f *Manager) {},
+			func(_ *testing.T, _ *Manager) {},
 		},
 	}
 
@@ -627,7 +630,8 @@ func TestBuild(t *testing.T) {
 			cfg := basicConfig()
 			tc.modifyBaseConfig(cfg)
 
-			input, err := cfg.Build(testutil.Logger(t), emittest.Nop)
+			set := componenttest.NewNopTelemetrySettings()
+			input, err := cfg.Build(set, emittest.Nop)
 			tc.errorRequirement(t, err)
 			if err != nil {
 				return
@@ -657,7 +661,7 @@ func TestBuildWithSplitFunc(t *testing.T) {
 	}{
 		{
 			"Basic",
-			func(cfg *Config) {},
+			func(_ *Config) {},
 			require.NoError,
 			func(t *testing.T, m *Manager) {
 				require.Equal(t, m.pollInterval, 10*time.Millisecond)
@@ -706,7 +710,8 @@ func TestBuildWithSplitFunc(t *testing.T) {
 				return len(data), data, nil
 			}
 
-			input, err := cfg.BuildWithSplitFunc(testutil.Logger(t), emittest.Nop, splitNone)
+			set := componenttest.NewNopTelemetrySettings()
+			input, err := cfg.BuildWithSplitFunc(set, emittest.Nop, splitNone)
 			tc.errorRequirement(t, err)
 			if err != nil {
 				return
@@ -793,7 +798,8 @@ func TestBuildWithHeader(t *testing.T) {
 			cfg := basicConfig()
 			tc.modifyBaseConfig(cfg)
 
-			input, err := cfg.Build(testutil.Logger(t), emittest.Nop)
+			set := componenttest.NewNopTelemetrySettings()
+			input, err := cfg.Build(set, emittest.Nop)
 			tc.errorRequirement(t, err)
 			if err != nil {
 				return
@@ -826,6 +832,12 @@ func (c *Config) withHeader(headerMatchPattern, extractRegex string) *Config {
 	return c
 }
 
+// withGzipFileSuffix is a builder-like helper for quickly setting up support for gzip compressed log files
+func (c *Config) withGzip() *Config {
+	c.Compression = "gzip"
+	return c
+}
+
 const mockOperatorType = "mock"
 
 func init() {
@@ -846,6 +858,6 @@ func newMockOperatorConfig(cfg *Config) *mockOperatorConfig {
 
 // This function is impelmented for compatibility with operatortest
 // but is not meant to be used directly
-func (h *mockOperatorConfig) Build(*zap.SugaredLogger) (operator.Operator, error) {
+func (h *mockOperatorConfig) Build(_ component.TelemetrySettings) (operator.Operator, error) {
 	panic("not impelemented")
 }

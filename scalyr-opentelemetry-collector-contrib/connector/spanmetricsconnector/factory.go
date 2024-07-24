@@ -31,20 +31,16 @@ func createDefaultConfig() component.Config {
 		AggregationTemporality:   "AGGREGATION_TEMPORALITY_CUMULATIVE",
 		DimensionsCacheSize:      defaultDimensionsCacheSize,
 		ResourceMetricsCacheSize: defaultResourceMetricsCacheSize,
-		MetricsFlushInterval:     15 * time.Second,
+		MetricsFlushInterval:     60 * time.Second,
 		Histogram:                HistogramConfig{Disable: false, Unit: defaultUnit},
 	}
 }
 
-func createTracesToMetricsConnector(ctx context.Context, params connector.CreateSettings, cfg component.Config, nextConsumer consumer.Metrics) (connector.Traces, error) {
-	c, err := newConnector(params.Logger, cfg, metricsTicker(ctx, cfg))
+func createTracesToMetricsConnector(ctx context.Context, params connector.Settings, cfg component.Config, nextConsumer consumer.Metrics) (connector.Traces, error) {
+	c, err := newConnector(params.Logger, cfg, clock.FromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
 	c.metricsConsumer = nextConsumer
 	return c, nil
-}
-
-func metricsTicker(ctx context.Context, cfg component.Config) *clock.Ticker {
-	return clock.FromContext(ctx).NewTicker(cfg.(*Config).MetricsFlushInterval)
 }

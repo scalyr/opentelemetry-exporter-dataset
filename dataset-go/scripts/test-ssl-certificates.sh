@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 # build example from README.md
-cd ../examples/readme;
+d=$(dirname "$0");
+cd "${d}/../examples/readme" || exit 1
+
 pwd;
 
 # build example

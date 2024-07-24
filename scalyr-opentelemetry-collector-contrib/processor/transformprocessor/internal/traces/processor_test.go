@@ -42,7 +42,13 @@ func Test_ProcessTraces_ResourceContext(t *testing.T) {
 		},
 		{
 			statement: `set(attributes["test"], "pass") where attributes["host.name"] == "wrong"`,
+			want: func(_ ptrace.Traces) {
+			},
+		},
+		{
+			statement: `set(schema_url, "test_schema_url")`,
 			want: func(td ptrace.Traces) {
+				td.ResourceSpans().At(0).SetSchemaUrl("test_schema_url")
 			},
 		},
 	}
@@ -77,7 +83,13 @@ func Test_ProcessTraces_ScopeContext(t *testing.T) {
 		},
 		{
 			statement: `set(attributes["test"], "pass") where version == 2`,
+			want: func(_ ptrace.Traces) {
+			},
+		},
+		{
+			statement: `set(schema_url, "test_schema_url")`,
 			want: func(td ptrace.Traces) {
+				td.ResourceSpans().At(0).ScopeSpans().At(0).SetSchemaUrl("test_schema_url")
 			},
 		},
 	}
@@ -298,7 +310,7 @@ func Test_ProcessTraces_TraceContext(t *testing.T) {
 		},
 		{
 			statement: `set(attributes["test"], Split(attributes["not_exist"], "|"))`,
-			want:      func(td ptrace.Traces) {},
+			want:      func(_ ptrace.Traces) {},
 		},
 		{
 			statement: `set(attributes["test"], Substring(attributes["total.string"], 3, 3))`,
@@ -315,7 +327,7 @@ func Test_ProcessTraces_TraceContext(t *testing.T) {
 		},
 		{
 			statement: `set(attributes["test"], Substring(attributes["not_exist"], 3, 3))`,
-			want:      func(td ptrace.Traces) {},
+			want:      func(_ ptrace.Traces) {},
 		},
 		{
 			statement: `set(attributes["test"], ["A", "B", "C"]) where name == "operationA"`,
@@ -365,7 +377,7 @@ func Test_ProcessTraces_TraceContext(t *testing.T) {
 		{
 			statement: `limit(attributes, 0, []) where name == "operationA"`,
 			want: func(td ptrace.Traces) {
-				td.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0).Attributes().RemoveIf(func(s string, v pcommon.Value) bool { return true })
+				td.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0).Attributes().RemoveIf(func(_ string, _ pcommon.Value) bool { return true })
 			},
 		},
 		{
@@ -664,8 +676,10 @@ func BenchmarkHundredSpans(b *testing.B) {
 func constructTraces() ptrace.Traces {
 	td := ptrace.NewTraces()
 	rs0 := td.ResourceSpans().AppendEmpty()
+	rs0.SetSchemaUrl("test_schema_url")
 	rs0.Resource().Attributes().PutStr("host.name", "localhost")
 	rs0ils0 := rs0.ScopeSpans().AppendEmpty()
+	rs0ils0.SetSchemaUrl("test_schema_url")
 	rs0ils0.Scope().SetName("scope")
 	fillSpanOne(rs0ils0.Spans().AppendEmpty())
 	fillSpanTwo(rs0ils0.Spans().AppendEmpty())

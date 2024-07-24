@@ -1,14 +1,24 @@
 type: mongodb
+scope_name: otelcol/mongodbreceiver
 
 status:
   class: receiver
   stability:
     beta: [metrics]
-  distributions: [contrib, observiq, sumo]
+  distributions: [contrib]
   codeowners:
     active: [djaglowski, schmikei]
+    seeking_new: true
 
 resource_attributes:
+  server.address:
+    description: The address of the MongoDB host.
+    enabled: true
+    type: string
+  server.port:
+    description: The port of the MongoDB host.
+    enabled: false
+    type: int
   database:
     description: The name of a database.
     enabled: true
@@ -352,4 +362,4 @@ metrics:
 
 tests:
   config:
-  skip_lifecycle: true
+    timeout: 1ms

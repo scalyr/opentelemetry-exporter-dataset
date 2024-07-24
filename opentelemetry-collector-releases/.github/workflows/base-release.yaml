@@ -32,10 +32,10 @@ jobs:
             GOARCH: arm
           - GOOS: windows
             GOARCH: s390x
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           fetch-depth: 0
 
@@ -53,6 +53,12 @@ jobs:
         with:
           go-version: '1.22'
           check-latest: true
+
+      - name: Setup wixl # Required to build MSI packages for Windows
+        if: ${{ matrix.GOOS }} == 'windows' && (${{ matrix.GOARCH }} == '386' || ${{ matrix.GOARCH }} == 'amd64')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wixl
 
       - name: Generate distribution sources
         run: make generate-sources
@@ -74,7 +80,7 @@ jobs:
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      - uses: goreleaser/goreleaser-action@5742e2a039330cbb23ebf35f046f814d4c6ff811 # v5.1.0
+      - uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
         with:
           distribution: goreleaser-pro
           version: latest
@@ -95,7 +101,7 @@ jobs:
 
   release:
     name: ${{ inputs.distribution }} Release
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: prepare
 
     permissions:
@@ -104,7 +110,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           fetch-depth: 0
 
@@ -145,7 +151,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: goreleaser/goreleaser-action@5742e2a039330cbb23ebf35f046f814d4c6ff811 # v5.1.0
+      - uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
         with:
           distribution: goreleaser-pro
           version: latest

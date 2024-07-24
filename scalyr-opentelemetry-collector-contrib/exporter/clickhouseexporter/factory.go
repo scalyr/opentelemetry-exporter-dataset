@@ -18,7 +18,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/clickhouseexporter/internal/metadata"
 )
 
-// NewFactory creates a factory for Elastic exporter.
+// NewFactory creates a factory for ClickHouse exporter.
 func NewFactory() exporter.Factory {
 	return exporter.NewFactory(
 		metadata.Type,
@@ -43,14 +43,16 @@ func createDefaultConfig() component.Config {
 		TracesTableName:  "otel_traces",
 		MetricsTableName: "otel_metrics",
 		TTL:              0,
+		CreateSchema:     true,
+		AsyncInsert:      true,
 	}
 }
 
 // createLogsExporter creates a new exporter for logs.
-// Logs are directly insert into clickhouse.
+// Logs are directly inserted into ClickHouse.
 func createLogsExporter(
 	ctx context.Context,
-	set exporter.CreateSettings,
+	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Logs, error) {
 	c := cfg.(*Config)
@@ -73,10 +75,10 @@ func createLogsExporter(
 }
 
 // createTracesExporter creates a new exporter for traces.
-// Traces are directly insert into clickhouse.
+// Traces are directly inserted into ClickHouse.
 func createTracesExporter(
 	ctx context.Context,
-	set exporter.CreateSettings,
+	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Traces, error) {
 	c := cfg.(*Config)
@@ -100,7 +102,7 @@ func createTracesExporter(
 
 func createMetricExporter(
 	ctx context.Context,
-	set exporter.CreateSettings,
+	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Metrics, error) {
 	c := cfg.(*Config)
@@ -122,21 +124,17 @@ func createMetricExporter(
 	)
 }
 
-func generateTTLExpr(ttlDays uint, ttl time.Duration, timeField string) string {
-	if ttlDays > 0 {
-		return fmt.Sprintf(`TTL toDateTime(%s) + toIntervalDay(%d)`, timeField, ttlDays)
-	}
-
+func generateTTLExpr(ttl time.Duration, timeField string) string {
 	if ttl > 0 {
 		switch {
 		case ttl%(24*time.Hour) == 0:
-			return fmt.Sprintf(`TTL toDateTime(%s) + toIntervalDay(%d)`, timeField, ttl/(24*time.Hour))
+			return fmt.Sprintf(`TTL %s + toIntervalDay(%d)`, timeField, ttl/(24*time.Hour))
 		case ttl%(time.Hour) == 0:
-			return fmt.Sprintf(`TTL toDateTime(%s) + toIntervalHour(%d)`, timeField, ttl/time.Hour)
+			return fmt.Sprintf(`TTL %s + toIntervalHour(%d)`, timeField, ttl/time.Hour)
 		case ttl%(time.Minute) == 0:
-			return fmt.Sprintf(`TTL toDateTime(%s) + toIntervalMinute(%d)`, timeField, ttl/time.Minute)
+			return fmt.Sprintf(`TTL %s + toIntervalMinute(%d)`, timeField, ttl/time.Minute)
 		default:
-			return fmt.Sprintf(`TTL toDateTime(%s) + toIntervalSecond(%d)`, timeField, ttl/time.Second)
+			return fmt.Sprintf(`TTL %s + toIntervalSecond(%d)`, timeField, ttl/time.Second)
 		}
 	}
 	return ""

@@ -274,6 +274,12 @@ func TestAddEvents(t *testing.T) {
 			assert.Nil(t, errShutdown)
 			lastError := client.LastError()
 			assert.Nil(t, lastError)
+			stats := client.Statistics()
+			assert.NotNil(t, stats)
+			assert.Equal(t, uint64(1), stats.Events.Enqueued())
+			assert.Equal(t, uint64(1), stats.Events.Processed())
+			assert.Equal(t, uint64(1), stats.Buffers.Enqueued())
+			assert.Equal(t, uint64(1), stats.Buffers.Processed())
 		})
 	}
 }
@@ -313,7 +319,7 @@ func TestAddEventsRetry(t *testing.T) {
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
-		buffer_config.WithRetryMaxInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(5*RetryBase),
 	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
@@ -325,7 +331,7 @@ func TestAddEventsRetry(t *testing.T) {
 	err = sc.Shutdown()
 	assert.Nil(t, err)
 	assert.True(t, wasSuccessful.Load())
-	assert.Equal(t, attempt.Load(), succeedInAttempt)
+	assert.Equal(t, succeedInAttempt, attempt.Load())
 
 	stats := sc.Statistics()
 	assert.Equal(t, uint64(1), stats.Events.Enqueued())
@@ -395,10 +401,12 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	defer server.Close()
 
 	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithMaxLifetime(RetryBase),
+		buffer_config.WithPurgeOlderThan(5*RetryBase),
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
-		buffer_config.WithRetryMaxInterval(RetryBase),
-		buffer_config.WithRetryShutdownTimeout(10*time.Second),
+		buffer_config.WithRetryMaxInterval(5*RetryBase),
+		buffer_config.WithRetryShutdownTimeout(30*time.Second),
 	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
@@ -408,7 +416,6 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	time.Sleep(RetryBase)
 	// we are not calling shutdown, because we want to process more events in the future
-	sc.publishAllBuffers()
 
 	// wait for processing
 	for i := 0; i < 10; i++ {
@@ -513,7 +520,7 @@ func TestAddEventsRetryWhenNonJSONResponseIsReturned(t *testing.T) {
 
 		assert.Nil(t, err, "Error reading request: %v", err)
 
-		payload := make([]byte, 0)
+		var payload []byte
 		if attempt.Load() < succeedInAttempt {
 			w.WriteHeader(500)
 			payload, err = json.Marshal("this is not JSON")
@@ -651,17 +658,17 @@ func TestAddEventsLargeEvent(t *testing.T) {
 	assert.Equal(t, uint64(0), stats.Events.Dropped())
 	assert.Equal(t, uint64(0), stats.Events.Broken())
 	assert.Equal(t, 1.0, stats.Events.SuccessRate())
-	assert.Equal(t, uint64(2), stats.Buffers.Enqueued())
-	assert.Equal(t, uint64(2), stats.Buffers.Processed())
+	assert.Equal(t, uint64(1), stats.Buffers.Enqueued())
+	assert.Equal(t, uint64(1), stats.Buffers.Processed())
 	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
 	assert.Equal(t, uint64(0), stats.Buffers.Dropped())
 	assert.Equal(t, uint64(0), stats.Buffers.Broken())
 	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
 	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
-	assert.Equal(t, uint64(2), stats.Transfer.BuffersProcessed())
+	assert.Equal(t, uint64(1), stats.Transfer.BuffersProcessed())
 	assert.Equal(t, uint64(0x5f0073), stats.Transfer.BytesSent())
 	assert.Equal(t, uint64(0x5f0073), stats.Transfer.BytesAccepted())
-	assert.Equal(t, 3113017.5, stats.Transfer.AvgBufferBytes())
+	assert.Equal(t, 6226035.0, stats.Transfer.AvgBufferBytes())
 }
 
 func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
@@ -791,7 +798,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
 			MaxSize:                  1000,
-			MaxLifetime:              2 * sentDelay,
+			MaxLifetime:              sentDelay,
 			PurgeOlderThan:           10 * sentDelay,
 			RetryRandomizationFactor: 1.0,
 			RetryMultiplier:          1.0,
@@ -799,6 +806,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
 			RetryShutdownTimeout:     ShutdownTimeout,
+			MaxParallelOutgoing:      20,
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
@@ -813,16 +821,14 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			eventBundle := &add_events.EventBundle{Event: event, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 			err := sc.AddEvents([]*add_events.EventBundle{eventBundle})
 			assert.Nil(t, err)
-			time.Sleep(sentDelay)
+			time.Sleep(4 * sentDelay)
 		}
 	}(NumEvents)
 
 	// wait on all buffers to be sent
-	time.Sleep(sentDelay * (NumEvents*2 + 1))
+	time.Sleep(NumEvents * 4 * sentDelay)
 
 	assert.GreaterOrEqual(t, attempt.Load(), int32(4))
-	// info := httpmock.GetCallCountInfo()
-	// assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": int(attempt.Load())})
 }
 
 func TestAddEventsDoNotRetryForever(t *testing.T) {
@@ -1052,7 +1058,6 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				},
 			},
 		},
-
 		// when serverHost is specified and is different from global one, there are two calls
 		{
 			name: "serverHost is different from global",
@@ -1439,6 +1444,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 
 			err = sc.AddEvents(bundles)
 			assert.Nil(t, err)
+			time.Sleep(RetryBase)
 			err = sc.Shutdown()
 			assert.Nil(t, err)
 
@@ -1582,7 +1588,7 @@ func newDataSetConfig(url string, bufferSettings buffer_config.DataSetBufferSett
 
 func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) *buffer_config.DataSetBufferSettings {
 	defaultOpts := []buffer_config.DataSetBufferSettingsOption{
-		buffer_config.WithMaxSize(20),
+		buffer_config.WithMaxSize(100),
 		buffer_config.WithMaxLifetime(0),
 		buffer_config.WithRetryInitialInterval(time.Second),
 		buffer_config.WithRetryMaxInterval(time.Second),
@@ -1590,6 +1596,7 @@ func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) 
 		buffer_config.WithRetryMultiplier(1.0),
 		buffer_config.WithRetryRandomizationFactor(1.0),
 		buffer_config.WithRetryShutdownTimeout(10 * time.Second),
+		buffer_config.WithMaxParallelOutgoing(20),
 	}
 	bufferSetting, _ := buffer_config.New(append(defaultOpts, customOpts...)...)
 	return bufferSetting

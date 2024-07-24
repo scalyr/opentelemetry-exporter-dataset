@@ -15,25 +15,29 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/collector/pdata/testdata"
 	"go.opentelemetry.io/collector/receiver/receiverhelper"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/testdata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kafkareceiver/internal/metadata"
 )
 
 func TestHeaderExtractionTraces(t *testing.T) {
 	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
-		ReceiverCreateSettings: receivertest.NewNopCreateSettings(),
+		ReceiverCreateSettings: receivertest.NewNopSettings(),
 	})
+	require.NoError(t, err)
+	telemetryBuilder, err := metadata.NewTelemetryBuilder(receivertest.NewNopSettings().TelemetrySettings)
 	require.NoError(t, err)
 	nextConsumer := &consumertest.TracesSink{}
 	c := tracesConsumerGroupHandler{
-		unmarshaler:  newPdataTracesUnmarshaler(&ptrace.ProtoUnmarshaler{}, defaultEncoding),
-		logger:       zaptest.NewLogger(t),
-		ready:        make(chan bool),
-		nextConsumer: nextConsumer,
-		obsrecv:      obsrecv,
+		unmarshaler:      newPdataTracesUnmarshaler(&ptrace.ProtoUnmarshaler{}, defaultEncoding),
+		logger:           zaptest.NewLogger(t),
+		ready:            make(chan bool),
+		nextConsumer:     nextConsumer,
+		obsrecv:          obsrecv,
+		telemetryBuilder: telemetryBuilder,
 	}
 	headers := []string{"headerKey1", "headerKey2"}
 	c.headerExtractor = &headerExtractor{
@@ -86,18 +90,21 @@ func TestHeaderExtractionTraces(t *testing.T) {
 
 func TestHeaderExtractionLogs(t *testing.T) {
 	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
-		ReceiverCreateSettings: receivertest.NewNopCreateSettings(),
+		ReceiverCreateSettings: receivertest.NewNopSettings(),
 	})
+	require.NoError(t, err)
+	telemetryBuilder, err := metadata.NewTelemetryBuilder(receivertest.NewNopSettings().TelemetrySettings)
 	require.NoError(t, err)
 	nextConsumer := &consumertest.LogsSink{}
 	unmarshaler := newTextLogsUnmarshaler()
 	unmarshaler, err = unmarshaler.WithEnc("utf-8")
 	c := logsConsumerGroupHandler{
-		unmarshaler:  unmarshaler,
-		logger:       zaptest.NewLogger(t),
-		ready:        make(chan bool),
-		nextConsumer: nextConsumer,
-		obsrecv:      obsrecv,
+		unmarshaler:      unmarshaler,
+		logger:           zaptest.NewLogger(t),
+		ready:            make(chan bool),
+		nextConsumer:     nextConsumer,
+		obsrecv:          obsrecv,
+		telemetryBuilder: telemetryBuilder,
 	}
 	headers := []string{"headerKey1", "headerKey2"}
 	c.headerExtractor = &headerExtractor{
@@ -145,16 +152,19 @@ func TestHeaderExtractionLogs(t *testing.T) {
 
 func TestHeaderExtractionMetrics(t *testing.T) {
 	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
-		ReceiverCreateSettings: receivertest.NewNopCreateSettings(),
+		ReceiverCreateSettings: receivertest.NewNopSettings(),
 	})
+	require.NoError(t, err)
+	telemetryBuilder, err := metadata.NewTelemetryBuilder(receivertest.NewNopSettings().TelemetrySettings)
 	require.NoError(t, err)
 	nextConsumer := &consumertest.MetricsSink{}
 	c := metricsConsumerGroupHandler{
-		unmarshaler:  newPdataMetricsUnmarshaler(&pmetric.ProtoUnmarshaler{}, defaultEncoding),
-		logger:       zaptest.NewLogger(t),
-		ready:        make(chan bool),
-		nextConsumer: nextConsumer,
-		obsrecv:      obsrecv,
+		unmarshaler:      newPdataMetricsUnmarshaler(&pmetric.ProtoUnmarshaler{}, defaultEncoding),
+		logger:           zaptest.NewLogger(t),
+		ready:            make(chan bool),
+		nextConsumer:     nextConsumer,
+		obsrecv:          obsrecv,
+		telemetryBuilder: telemetryBuilder,
 	}
 	headers := []string{"headerKey1", "headerKey2"}
 	c.headerExtractor = &headerExtractor{
@@ -182,7 +192,7 @@ func TestHeaderExtractionMetrics(t *testing.T) {
 		assert.NoError(t, err)
 		wg.Done()
 	}()
-	ld := testdata.GenerateMetricsOneMetric()
+	ld := testdata.GenerateMetrics(1)
 	unmarshaler := &pmetric.ProtoMarshaler{}
 	bts, err := unmarshaler.MarshalMetrics(ld)
 	groupClaim.messageChan <- &sarama.ConsumerMessage{

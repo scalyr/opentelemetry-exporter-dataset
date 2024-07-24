@@ -28,7 +28,6 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	conventions "go.opentelemetry.io/collector/semconv/v1.9.0"
-	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/loadbalancingexporter/internal/metadata"
 )
@@ -52,7 +51,7 @@ func TestNewTracesExporter(t *testing.T) {
 	} {
 		t.Run(tt.desc, func(t *testing.T) {
 			// test
-			_, err := newTracesExporter(exportertest.NewNopCreateSettings(), tt.config)
+			_, err := newTracesExporter(exportertest.NewNopSettings(), tt.config)
 
 			// verify
 			require.Equal(t, tt.err, err)
@@ -69,7 +68,7 @@ func TestTracesExporterStart(t *testing.T) {
 		{
 			"ok",
 			func() *traceExporterImp {
-				p, _ := newTracesExporter(exportertest.NewNopCreateSettings(), simpleConfig())
+				p, _ := newTracesExporter(exportertest.NewNopSettings(), simpleConfig())
 				return p
 			}(),
 			nil,
@@ -77,8 +76,9 @@ func TestTracesExporterStart(t *testing.T) {
 		{
 			"error",
 			func() *traceExporterImp {
-				lb, _ := newLoadBalancer(exportertest.NewNopCreateSettings(), simpleConfig(), nil)
-				p, _ := newTracesExporter(exportertest.NewNopCreateSettings(), simpleConfig())
+				ts, tb := getTelemetryAssets(t)
+				lb, _ := newLoadBalancer(ts.Logger, simpleConfig(), nil, tb)
+				p, _ := newTracesExporter(ts, simpleConfig())
 
 				lb.res = &mockResolver{
 					onStart: func(context.Context) error {
@@ -108,7 +108,7 @@ func TestTracesExporterStart(t *testing.T) {
 }
 
 func TestTracesExporterShutdown(t *testing.T) {
-	p, err := newTracesExporter(exportertest.NewNopCreateSettings(), simpleConfig())
+	p, err := newTracesExporter(exportertest.NewNopSettings(), simpleConfig())
 	require.NotNil(t, p)
 	require.NoError(t, err)
 
@@ -120,14 +120,15 @@ func TestTracesExporterShutdown(t *testing.T) {
 }
 
 func TestConsumeTraces(t *testing.T) {
-	componentFactory := func(ctx context.Context, endpoint string) (component.Component, error) {
+	ts, tb := getTelemetryAssets(t)
+	componentFactory := func(_ context.Context, _ string) (component.Component, error) {
 		return newNopMockTracesExporter(), nil
 	}
-	lb, err := newLoadBalancer(exportertest.NewNopCreateSettings(), simpleConfig(), componentFactory)
+	lb, err := newLoadBalancer(ts.Logger, simpleConfig(), componentFactory, tb)
 	require.NotNil(t, lb)
 	require.NoError(t, err)
 
-	p, err := newTracesExporter(exportertest.NewNopCreateSettings(), simpleConfig())
+	p, err := newTracesExporter(ts, simpleConfig())
 	require.NotNil(t, p)
 	require.NoError(t, err)
 	assert.Equal(t, p.routingKey, traceIDRouting)
@@ -136,7 +137,7 @@ func TestConsumeTraces(t *testing.T) {
 	lb.addMissingExporters(context.Background(), []string{"endpoint-1"})
 	lb.res = &mockResolver{
 		triggerCallbacks: true,
-		onResolve: func(ctx context.Context) ([]string, error) {
+		onResolve: func(_ context.Context) ([]string, error) {
 			return []string{"endpoint-1"}, nil
 		},
 	}
@@ -155,15 +156,70 @@ func TestConsumeTraces(t *testing.T) {
 	assert.Nil(t, res)
 }
 
-func TestConsumeTracesServiceBased(t *testing.T) {
-	componentFactory := func(ctx context.Context, endpoint string) (component.Component, error) {
-		return newNopMockTracesExporter(), nil
+// This test validates that exporter is can concurrently change the endpoints while consuming traces.
+func TestConsumeTraces_ConcurrentResolverChange(t *testing.T) {
+	ts, tb := getTelemetryAssets(t)
+	consumeStarted := make(chan struct{})
+	consumeDone := make(chan struct{})
+
+	// imitate a slow exporter
+	te := &mockTracesExporter{Component: mockComponent{}}
+	te.ConsumeTracesFn = func(_ context.Context, _ ptrace.Traces) error {
+		close(consumeStarted)
+		time.Sleep(50 * time.Millisecond)
+		return te.consumeErr
 	}
-	lb, err := newLoadBalancer(exportertest.NewNopCreateSettings(), serviceBasedRoutingConfig(), componentFactory)
+	componentFactory := func(_ context.Context, _ string) (component.Component, error) {
+		return te, nil
+	}
+	lb, err := newLoadBalancer(ts.Logger, simpleConfig(), componentFactory, tb)
 	require.NotNil(t, lb)
 	require.NoError(t, err)
 
-	p, err := newTracesExporter(exportertest.NewNopCreateSettings(), serviceBasedRoutingConfig())
+	p, err := newTracesExporter(ts, simpleConfig())
+	require.NotNil(t, p)
+	require.NoError(t, err)
+	assert.Equal(t, p.routingKey, traceIDRouting)
+
+	endpoints := []string{"endpoint-1"}
+	lb.res = &mockResolver{
+		triggerCallbacks: true,
+		onResolve: func(_ context.Context) ([]string, error) {
+			return endpoints, nil
+		},
+	}
+	p.loadBalancer = lb
+
+	err = p.Start(context.Background(), componenttest.NewNopHost())
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, p.Shutdown(context.Background()))
+	}()
+
+	go func() {
+		assert.NoError(t, p.ConsumeTraces(context.Background(), simpleTraces()))
+		close(consumeDone)
+	}()
+
+	// update endpoint while consuming traces
+	<-consumeStarted
+	endpoints = []string{"endpoint-2"}
+	endpoint, err := lb.res.resolve(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, endpoints, endpoint)
+	<-consumeDone
+}
+
+func TestConsumeTracesServiceBased(t *testing.T) {
+	ts, tb := getTelemetryAssets(t)
+	componentFactory := func(_ context.Context, _ string) (component.Component, error) {
+		return newNopMockTracesExporter(), nil
+	}
+	lb, err := newLoadBalancer(ts.Logger, serviceBasedRoutingConfig(), componentFactory, tb)
+	require.NotNil(t, lb)
+	require.NoError(t, err)
+
+	p, err := newTracesExporter(ts, serviceBasedRoutingConfig())
 	require.NotNil(t, p)
 	require.NoError(t, err)
 	assert.Equal(t, p.routingKey, svcRouting)
@@ -173,7 +229,7 @@ func TestConsumeTracesServiceBased(t *testing.T) {
 	lb.addMissingExporters(context.Background(), []string{"endpoint-2"})
 	lb.res = &mockResolver{
 		triggerCallbacks: true,
-		onResolve: func(ctx context.Context) ([]string, error) {
+		onResolve: func(_ context.Context) ([]string, error) {
 			return []string{"endpoint-1", "endpoint-2"}, nil
 		},
 	}
@@ -222,20 +278,21 @@ func TestServiceBasedRoutingForSameTraceId(t *testing.T) {
 }
 
 func TestConsumeTracesExporterNoEndpoint(t *testing.T) {
-	componentFactory := func(ctx context.Context, endpoint string) (component.Component, error) {
+	ts, tb := getTelemetryAssets(t)
+	componentFactory := func(_ context.Context, _ string) (component.Component, error) {
 		return newNopMockTracesExporter(), nil
 	}
-	lb, err := newLoadBalancer(exportertest.NewNopCreateSettings(), simpleConfig(), componentFactory)
+	lb, err := newLoadBalancer(ts.Logger, simpleConfig(), componentFactory, tb)
 	require.NotNil(t, lb)
 	require.NoError(t, err)
 
-	p, err := newTracesExporter(exportertest.NewNopCreateSettings(), simpleConfig())
+	p, err := newTracesExporter(ts, simpleConfig())
 	require.NotNil(t, p)
 	require.NoError(t, err)
 
 	lb.res = &mockResolver{
 		triggerCallbacks: true,
-		onResolve: func(ctx context.Context) ([]string, error) {
+		onResolve: func(_ context.Context) ([]string, error) {
 			return nil, nil
 		},
 	}
@@ -256,14 +313,15 @@ func TestConsumeTracesExporterNoEndpoint(t *testing.T) {
 }
 
 func TestConsumeTracesUnexpectedExporterType(t *testing.T) {
-	componentFactory := func(ctx context.Context, endpoint string) (component.Component, error) {
+	ts, tb := getTelemetryAssets(t)
+	componentFactory := func(_ context.Context, _ string) (component.Component, error) {
 		return newNopMockExporter(), nil
 	}
-	lb, err := newLoadBalancer(exportertest.NewNopCreateSettings(), simpleConfig(), componentFactory)
+	lb, err := newLoadBalancer(ts.Logger, simpleConfig(), componentFactory, tb)
 	require.NotNil(t, lb)
 	require.NoError(t, err)
 
-	p, err := newTracesExporter(exportertest.NewNopCreateSettings(), simpleConfig())
+	p, err := newTracesExporter(ts, simpleConfig())
 	require.NotNil(t, p)
 	require.NoError(t, err)
 
@@ -271,7 +329,7 @@ func TestConsumeTracesUnexpectedExporterType(t *testing.T) {
 	lb.addMissingExporters(context.Background(), []string{"endpoint-1"})
 	lb.res = &mockResolver{
 		triggerCallbacks: true,
-		onResolve: func(ctx context.Context) ([]string, error) {
+		onResolve: func(_ context.Context) ([]string, error) {
 			return []string{"endpoint-1"}, nil
 		},
 	}
@@ -297,7 +355,8 @@ func TestBuildExporterConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	factories.Exporters[metadata.Type] = NewFactory()
-
+	// https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/33594
+	// nolint:staticcheck
 	cfg, err := otelcoltest.LoadConfigAndValidate(filepath.Join("testdata", "test-build-exporter-config.yaml"), factories)
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -320,15 +379,16 @@ func TestBuildExporterConfig(t *testing.T) {
 }
 
 func TestBatchWithTwoTraces(t *testing.T) {
+	ts, tb := getTelemetryAssets(t)
 	sink := new(consumertest.TracesSink)
-	componentFactory := func(ctx context.Context, endpoint string) (component.Component, error) {
+	componentFactory := func(_ context.Context, _ string) (component.Component, error) {
 		return newMockTracesExporter(sink.ConsumeTraces), nil
 	}
-	lb, err := newLoadBalancer(exportertest.NewNopCreateSettings(), simpleConfig(), componentFactory)
+	lb, err := newLoadBalancer(ts.Logger, simpleConfig(), componentFactory, tb)
 	require.NotNil(t, lb)
 	require.NoError(t, err)
 
-	p, err := newTracesExporter(exportertest.NewNopCreateSettings(), simpleConfig())
+	p, err := newTracesExporter(ts, simpleConfig())
 	require.NotNil(t, p)
 	require.NoError(t, err)
 
@@ -394,6 +454,7 @@ func TestNoTracesInBatch(t *testing.T) {
 
 func TestRollingUpdatesWhenConsumeTraces(t *testing.T) {
 	t.Skip("Flaky Test - See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/13331")
+	ts, tb := getTelemetryAssets(t)
 
 	// this test is based on the discussion in the following issue for this exporter:
 	// https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/1690
@@ -401,7 +462,7 @@ func TestRollingUpdatesWhenConsumeTraces(t *testing.T) {
 
 	// simulate rolling updates, the dns resolver should resolve in the following order
 	// ["127.0.0.1"] -> ["127.0.0.1", "127.0.0.2"] -> ["127.0.0.2"]
-	res, err := newDNSResolver(zap.NewNop(), "service-1", "", 5*time.Second, 1*time.Second)
+	res, err := newDNSResolver(ts.Logger, "service-1", "", 5*time.Second, 1*time.Second, tb)
 	require.NoError(t, err)
 
 	mu := sync.Mutex{}
@@ -449,14 +510,14 @@ func TestRollingUpdatesWhenConsumeTraces(t *testing.T) {
 			DNS: &DNSResolver{Hostname: "service-1", Port: ""},
 		},
 	}
-	componentFactory := func(ctx context.Context, endpoint string) (component.Component, error) {
+	componentFactory := func(_ context.Context, _ string) (component.Component, error) {
 		return newNopMockTracesExporter(), nil
 	}
-	lb, err := newLoadBalancer(exportertest.NewNopCreateSettings(), cfg, componentFactory)
+	lb, err := newLoadBalancer(ts.Logger, cfg, componentFactory, tb)
 	require.NotNil(t, lb)
 	require.NoError(t, err)
 
-	p, err := newTracesExporter(exportertest.NewNopCreateSettings(), cfg)
+	p, err := newTracesExporter(ts, cfg)
 	require.NotNil(t, p)
 	require.NoError(t, err)
 
@@ -465,19 +526,19 @@ func TestRollingUpdatesWhenConsumeTraces(t *testing.T) {
 
 	counter1 := &atomic.Int64{}
 	counter2 := &atomic.Int64{}
-	defaultExporters := map[string]component.Component{
-		"127.0.0.1:4317": newMockTracesExporter(func(ctx context.Context, td ptrace.Traces) error {
+	id1 := "127.0.0.1:4317"
+	id2 := "127.0.0.2:4317"
+	defaultExporters := map[string]*wrappedExporter{
+		id1: newWrappedExporter(newMockTracesExporter(func(_ context.Context, _ ptrace.Traces) error {
 			counter1.Add(1)
 			// simulate an unreachable backend
 			time.Sleep(10 * time.Second)
 			return nil
-		},
-		),
-		"127.0.0.2:4317": newMockTracesExporter(func(ctx context.Context, td ptrace.Traces) error {
+		}), id1),
+		id2: newWrappedExporter(newMockTracesExporter(func(_ context.Context, _ ptrace.Traces) error {
 			counter2.Add(1)
 			return nil
-		},
-		),
+		}), id2),
 	}
 
 	// test
@@ -490,7 +551,7 @@ func TestRollingUpdatesWhenConsumeTraces(t *testing.T) {
 	lb.updateLock.Lock()
 	lb.exporters = defaultExporters
 	lb.updateLock.Unlock()
-	lb.res.onChange(func(endpoints []string) {
+	lb.res.onChange(func(_ []string) {
 		lb.updateLock.Lock()
 		lb.exporters = defaultExporters
 		lb.updateLock.Unlock()
@@ -535,8 +596,9 @@ func TestRollingUpdatesWhenConsumeTraces(t *testing.T) {
 }
 
 func benchConsumeTraces(b *testing.B, endpointsCount int, tracesCount int) {
+	ts, tb := getTelemetryAssets(b)
 	sink := new(consumertest.TracesSink)
-	componentFactory := func(ctx context.Context, endpoint string) (component.Component, error) {
+	componentFactory := func(_ context.Context, _ string) (component.Component, error) {
 		return newMockTracesExporter(sink.ConsumeTraces), nil
 	}
 
@@ -551,11 +613,11 @@ func benchConsumeTraces(b *testing.B, endpointsCount int, tracesCount int) {
 		},
 	}
 
-	lb, err := newLoadBalancer(exportertest.NewNopCreateSettings(), config, componentFactory)
+	lb, err := newLoadBalancer(ts.Logger, config, componentFactory, tb)
 	require.NotNil(b, lb)
 	require.NoError(b, err)
 
-	p, err := newTracesExporter(exportertest.NewNopCreateSettings(), config)
+	p, err := newTracesExporter(exportertest.NewNopSettings(), config)
 	require.NotNil(b, p)
 	require.NoError(b, err)
 
@@ -688,6 +750,7 @@ func serviceBasedRoutingConfig() *Config {
 type mockTracesExporter struct {
 	component.Component
 	ConsumeTracesFn func(ctx context.Context, td ptrace.Traces) error
+	consumeErr      error
 }
 
 func newMockTracesExporter(consumeTracesFn func(ctx context.Context, td ptrace.Traces) error) exporter.Traces {
@@ -698,12 +761,12 @@ func newMockTracesExporter(consumeTracesFn func(ctx context.Context, td ptrace.T
 }
 
 func newNopMockTracesExporter() exporter.Traces {
-	return &mockTracesExporter{
-		Component: mockComponent{},
-		ConsumeTracesFn: func(ctx context.Context, td ptrace.Traces) error {
-			return nil
-		},
-	}
+	return &mockTracesExporter{Component: mockComponent{}}
+}
+
+func (e *mockTracesExporter) Shutdown(context.Context) error {
+	e.consumeErr = errors.New("exporter is shut down")
+	return nil
 }
 
 func (e *mockTracesExporter) Capabilities() consumer.Capabilities {
@@ -712,7 +775,7 @@ func (e *mockTracesExporter) Capabilities() consumer.Capabilities {
 
 func (e *mockTracesExporter) ConsumeTraces(ctx context.Context, td ptrace.Traces) error {
 	if e.ConsumeTracesFn == nil {
-		return nil
+		return e.consumeErr
 	}
 	return e.ConsumeTracesFn(ctx, td)
 }

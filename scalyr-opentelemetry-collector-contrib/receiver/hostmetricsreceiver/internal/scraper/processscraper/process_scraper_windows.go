@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v4/cpu"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/processscraper/internal/metadata"
@@ -34,6 +34,10 @@ func getProcessName(_ context.Context, _ processHandle, exePath string) (string,
 	}
 
 	return filepath.Base(exePath), nil
+}
+
+func getProcessCgroup(ctx context.Context, proc processHandle) (string, error) {
+	return "", nil
 }
 
 func getProcessExecutable(ctx context.Context, proc processHandle) (string, error) {
