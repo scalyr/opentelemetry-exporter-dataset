@@ -16,7 +16,7 @@ generate = "generate:main"
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11.0"
 black = "^24.4.2"
-flake8 = "^6.1.0"
+flake8 = "^7.1.0"
 isort = "^5.12.0"
 
 [build-system]
