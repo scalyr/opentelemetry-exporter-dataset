@@ -41,7 +41,7 @@ USER ${USER_UID}
 WORKDIR /
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=builder --chmod=755 /build/_build/otelcol-contrib /otelcol-contrib-datasetexporter-latest
+COPY --from=builder --chmod=755 /build/_build/otelcol-contrib-datasetexporter-latest /otelcol-contrib
 COPY --from=builder /build/opentelemetry-collector-releases/distributions/otelcol/config.yaml /etc/otelcol-contrib/config.yaml
 
 ENTRYPOINT ["/otelcol-contrib"]
