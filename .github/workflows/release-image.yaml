@@ -78,7 +78,7 @@ jobs:
           endpoint: builder
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
