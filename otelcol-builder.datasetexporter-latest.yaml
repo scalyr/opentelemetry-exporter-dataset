@@ -1,5 +1,5 @@
 # NOTE: We include all the same components as the upstream otel contrib image so it should be a drop in replacement
-# Based on top of https://github.com/open-telemetry/opentelemetry-collector-releases/blob/main/distributions/otelcol-contrib/manifest.yaml
+# Based on https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/cmd/otelcontribcol/builder-config.yaml
 dist:
   name: otelcol-contrib
   description: OpenTelemetry Collector Contrib Binary which contains latest version of the datasetexporter plugin from datasetexporter-latest branch from our from https://github.com/scalyr/opentelemetry-collector-contrib/ and all other upstream otel contrib components
@@ -87,7 +87,6 @@ exporters:
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sapmexporter v0.106.1
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sentryexporter v0.106.1
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter v0.106.1
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/skywalkingexporter v0.106.1
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/splunkhecexporter v0.106.1
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sumologicexporter v0.106.1
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/syslogexporter v0.106.1
