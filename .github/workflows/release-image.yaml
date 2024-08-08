@@ -78,7 +78,7 @@ jobs:
           endpoint: builder
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -94,7 +94,7 @@ jobs:
       # This image contains only DataSet exporter and minimum needed contrib components
       - name: Build and Push Image To GHCR
         if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           file: Dockerfile
           context: .
@@ -116,7 +116,7 @@ jobs:
       # NOTE: We need to run this action twice since we can't load image into Docker + push at the same
       # time if arm is used. See https://github.com/docker/buildx/issues/59 or details.
       - name: Build Dev Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           file: Dockerfile.contrib_datasetexporter_latest
           context: .
@@ -150,7 +150,7 @@ jobs:
 
       - name: Push Dev Image To Docker Hub Account
         if: ${{ github.event_name != 'schedule' && github.ref_name == 'main' }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           file: Dockerfile.contrib_datasetexporter_latest
           context: .
