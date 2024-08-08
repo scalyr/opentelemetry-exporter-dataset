@@ -13,7 +13,7 @@ dist:
   description: OpenTelemetry Collector Contrib Binary which contains latest version of the datasetexporter plugin from datasetexporter-latest branch from our from https://github.com/scalyr/opentelemetry-collector-contrib/ and all other upstream otel contrib components
   output_path: ./_build
   version: 0.106.1-dev-datasetexporter-latest
-  otelcol_version: 0.106.1-datasetexporter-latest
+  otelcol_version: 0.106.1
 
 extensions:
   - gomod: go.opentelemetry.io/collector/extension/zpagesextension v0.106.1
