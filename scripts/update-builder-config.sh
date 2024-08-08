@@ -30,11 +30,11 @@ sed -i "" '/description: /a\
   output_path: .\/_build
   ' "${TARGET_CONFIG}";
 sed -i "" "s/name: .*/name: otelcol-contrib-datasetexporter-latest/" "${TARGET_CONFIG}";
-sed -i "" "s/\(version: .*\)/\1-datasetexporter-latest/" "${TARGET_CONFIG}";
+sed -i "" "s/\( version: .*\)/\1-datasetexporter-latest/" "${TARGET_CONFIG}";
 sed -i "" "/module: /d" "${TARGET_CONFIG}";
 
 # remove all replaces
-sed -i "" "/ => ..\/..\//d" "${TARGET_CONFIG}";
+sed -ri "" "/ +=> +..\/..\//d" "${TARGET_CONFIG}";
 
 # add replaces related to datasetexporter
 echo "  - github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter => github.com/scalyr/opentelemetry-collector-contrib/exporter/datasetexporter datasetexporter-latest" >> "${TARGET_CONFIG}";
