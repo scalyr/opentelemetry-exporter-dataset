@@ -24,7 +24,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   # TODO: Add some check and fail if this version doesn't match in ./Dockerfile and otelcol-builder.yaml
-  OTEL_VERSION: v0.104.0
+  OTEL_VERSION: v0.106.1
 
 jobs:
   build-and-push-image:
