@@ -6,7 +6,7 @@ FROM --platform=$BUILDPLATFORM golang:1.21 as builder
 RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
 
 # install builder
-RUN go install go.opentelemetry.io/collector/cmd/builder@v0.104.0
+RUN go install go.opentelemetry.io/collector/cmd/builder@v0.106.1
 
 # copy source files, so we rebuild images when something changes
 COPY dataset-go/ ./dataset-go/
