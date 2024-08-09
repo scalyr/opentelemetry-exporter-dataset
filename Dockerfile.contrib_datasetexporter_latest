@@ -5,7 +5,7 @@
 ##
 ## Builder image
 ##
-FROM --platform=$BUILDPLATFORM golang:1.21 as builder
+FROM --platform=$BUILDPLATFORM golang:1.21 AS builder
 
 ARG TARGETARCH
 
@@ -13,7 +13,7 @@ ARG TARGETARCH
 RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
 
 # install builder
-RUN go install go.opentelemetry.io/collector/cmd/builder@v0.104.0
+RUN go install go.opentelemetry.io/collector/cmd/builder@v0.106.1
 
 # copy source files, so we rebuild images when something changes
 WORKDIR /build
@@ -33,7 +33,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} $GOPATH/bin/builder --config=/
 ##
 ## Runtime image
 ##
-FROM scratch as runtime
+FROM scratch AS runtime
 
 ARG USER_UID=10001
 USER ${USER_UID}
@@ -41,7 +41,7 @@ USER ${USER_UID}
 WORKDIR /
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=builder --chmod=755 /build/_build/otelcol-contrib /otelcol-contrib
+COPY --from=builder --chmod=755 /build/_build/otelcol-contrib-datasetexporter-latest /otelcol-contrib
 COPY --from=builder /build/opentelemetry-collector-releases/distributions/otelcol/config.yaml /etc/otelcol-contrib/config.yaml
 
 ENTRYPOINT ["/otelcol-contrib"]
