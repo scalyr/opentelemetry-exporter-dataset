@@ -152,23 +152,27 @@ For the configuration option you should check [documentation](datasetexporter/RE
    ```bash
    git push
     ```
-5. Update docker files and configurations to use the new version of the collector
+5. Update builder config
+    ```bash
+    ./scripts/update-builder-config.sh
+    ```
+6. Update docker files and configurations to use the new version of the collector
    * old version is from here - [otelcol-builder.yaml](https://github.com/scalyr/opentelemetry-exporter-dataset/blob/main/otelcol-builder.yaml)
    * new version is from the [opentelemetry-collector-contrib](https://github.com/open-telemetry/opentelemetry-collector-contrib/releases)
    ```bash
    ./scripts/update-otel-version.sh -f v0.101.0 -t v0.104.0
    ```
-6. Update collector configuration to use the new version of dataset-go
+7. Update collector configuration to use the new version of dataset-go
    * old version is from here - [otelcol-builder.yaml](https://github.com/scalyr/opentelemetry-exporter-dataset/blob/main/otelcol-builder.yaml)
    * new version is from the [dataset-go](https://github.com/scalyr/dataset-go/releases)
    ```bash
    ./scripts/update-dataset-go-version.sh -f v0.18.0 -t v0.20.0
    ```
-7. Build all docker images
+8. Build all docker images
    ```bash
    make docker-build
    ```
-8. Run e2e tests
+9. Run e2e tests
    * Set environment variables for the tests
      ```bash
      export TEST_RUN_SERVERHOST=`date +"%s"`
@@ -179,7 +183,6 @@ For the configuration option you should check [documentation](datasetexporter/RE
      ```bash
      make test-e2e
      ```
-
 
 ## Testing Changes Locally
 
