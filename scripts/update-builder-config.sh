@@ -36,6 +36,6 @@ sed -i "" "/module: /d" "${TARGET_CONFIG}";
 # remove all replaces
 sed -ri "" "/ +=> +..\/..\//d" "${TARGET_CONFIG}";
 
-# add replaces related to datasetexporter
-echo "  - github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter => github.com/scalyr/opentelemetry-collector-contrib/exporter/datasetexporter datasetexporter-latest" >> "${TARGET_CONFIG}";
+# add replaces related to datasetexporter and use the version from repository
+echo "  - github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter => ./../scalyr-opentelemetry-collector-contrib/exporter/datasetexporter" >> "${TARGET_CONFIG}";
 echo "  - github.com/scalyr/dataset-go => ./../dataset-go" >> "${TARGET_CONFIG}";
