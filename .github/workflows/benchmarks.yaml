@@ -136,7 +136,7 @@ jobs:
       # There is a known race / bug so sometimes this step will fail, see
       # https://github.com/actions/download-artifact/issues/140#issuecomment-1314062872 for details
       - name: Download result artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: benchmark-results-local-dummy-server
           path: /tmp/
