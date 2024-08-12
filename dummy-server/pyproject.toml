@@ -10,7 +10,7 @@ packages = [{include = "dummy_server"}]
 python = "^3.9"
 fastapi = "^0.111.1"
 uvicorn = "^0.30.5"
-pyhocon = "^0.3.60"
+pyhocon = "^0.3.61"
 
 
 [tool.poetry.group.dev.dependencies]
