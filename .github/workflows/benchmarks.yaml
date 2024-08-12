@@ -81,7 +81,7 @@ jobs:
             scripts/e2e/log.log.used*
 
       - name: Convert Result to Markdown Table
-        uses: buildingcash/json-to-markdown-table-action@3212cd4ed03822b88cc1f1f96353100a3ef98474 # v1.0.0
+        uses: buildingcash/json-to-markdown-table-action@b442169239ef35f1dc4e5c8c3d47686c081a7e65 # v1.1.0
         id: md-table
         with:
           json: ${{ steps.benchmark-result-json.outputs.json }}
@@ -257,7 +257,7 @@ jobs:
             scripts/e2e/stats-col-*.json
 
       - name: Convert Result to Markdown Table
-        uses: buildingcash/json-to-markdown-table-action@3212cd4ed03822b88cc1f1f96353100a3ef98474 # v1.0.0
+        uses: buildingcash/json-to-markdown-table-action@b442169239ef35f1dc4e5c8c3d47686c081a7e65 # v1.1.0
         id: md-table
         with:
           json: ${{ steps.benchmark-result-json.outputs.json }}
